@@ -2,6 +2,8 @@
 
 **任意类型的自定义文件**。用「仓库」组织内容，支持星标、评论、搜索、目录层级与下载统计。前端交互动效全部由 **GSAP** 驱动。
 
+管理员账号密码为:alice;DeployTest123
+
 ![dark theme](https://img.shields.io/badge/theme-dark%20green-0ae448) ![fastapi](https://img.shields.io/badge/backend-FastAPI-009688) ![gsap](https://img.shields.io/badge/animation-GSAP%203.15-88ce02)
 
 ---
