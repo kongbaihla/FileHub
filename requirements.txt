@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+jinja2>=3.1
+# make_cover / make_banner / thumbnails all use PIL. It was missing from this
+# file, so a clean install came up without it and the first cover upload failed
+# at import time while working fine on a machine that already had it.
+Pillow>=10.0

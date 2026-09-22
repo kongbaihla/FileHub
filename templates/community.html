@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block page %}community{% endblock %}
+{% block title %}社区{% endblock %}
+{% block content %}
+<section class="chat-shell chat-shell-single">
+  {% if chat_bg_url %}
+  {# Painted behind the card rather than inside it: the card has its own opaque
+     background and rounded frame, so a layer within would be hidden by it. The
+     config carries the same fields as the profile banner (scale / x / y /
+     opacity / blur) and is applied by applyChatBg() in app.js. #}
+  <div class="chat-bg" id="chat-bg-el" aria-hidden="true">
+    <div class="chat-bg-inner"
+         data-chatbg='{{ chat_bg | tojson }}'
+         style="background-image: url('{{ chat_bg_url }}')"></div>
+  </div>
+  {% endif %}
+  <div class="chat-main">
+    <div class="chat-header">
+      <span class="chat-header-avatar" id="chat-header-avatar">#</span>
+      <div class="chat-header-info">
+        <strong>公共聊天室</strong>
+        <span class="chat-header-sub" id="chat-header-sub">所有公开仓库的讨论都汇总在这里</span>
+      </div>
+      <span class="chat-online" id="chat-count"></span>
+    </div>
+
+    <div class="chat-msg-area" id="chat-msg-area">
+      <div class="chat-empty" id="chat-empty">
+        <p>还没有消息，来说第一句吧</p>
+      </div>
+    </div>
+
+    <div class="chat-composer" id="chat-composer">
+      <div class="chat-quote-bar" id="chat-quote-bar" hidden>
+        <span class="chat-quote-label">引用</span>
+        <span class="chat-quote-text" id="chat-quote-text"></span>
+        <button type="button" class="icon-btn" id="chat-quote-cancel" aria-label="取消引用">&#10005;</button>
+      </div>
+      <div class="chat-tools">
+        <button type="button" class="chat-tool" id="chat-emoji-btn" title="表情">&#128522;</button>
+        <span class="chat-hint">Enter 发送 &middot; Shift+Enter 换行 &middot; 链接自动识别 &middot; 用 #仓库名 提及</span>
+      </div>
+      <div class="chat-emoji-panel" id="chat-emoji-panel" hidden></div>
+      <textarea id="chat-input" rows="1" placeholder="说点什么…" maxlength="2000"></textarea>
+      <div class="chat-send-row">
+        <span class="chat-counter" id="chat-counter">0/2000</span>
+        <button type="button" class="btn btn-green btn-sm" id="chat-send" disabled>发送</button>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

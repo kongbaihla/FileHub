@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+{% block page %}repo{% endblock %}
+{% block title %}{{ owner }}/{{ repo.name }}{% endblock %}
+{% block content %}
+<section class="repo-hero">
+  <div class="repo-hero-inner repo-hero-with-cover">
+    <div class="repo-hero-content">
+    <p class="repo-crumb-top">
+      <a href="/u/{{ owner }}">{{ owner }}</a> / <strong>{{ repo.name }}</strong>
+      {% if repo.is_private %}<span class="privacy-badge">🔒 私有</span>{% endif %}
+    </p>
+    <h1 class="repo-title split-hero-sm" id="repo-title">{{ repo.name }}</h1>
+    <p class="repo-sub" id="repo-desc" {% if not repo.description %}hidden{% endif %}>{{ repo.description or "" }}</p>
+    {% if is_owner %}
+    <div class="repo-edit-row">
+      <button type="button" class="bio-edit-btn" id="repo-edit-btn">✏️ 编辑标题与描述</button>
+    </div>
+    <div class="repo-editor" id="repo-editor" hidden>
+      <label class="field">仓库名（支持中文、字母、数字、常用符号）
+        <input type="text" id="repo-name-input" value="{{ repo.name }}"
+               maxlength="64"
+               title="不能包含 / \ ? # % < > &quot; ' ` | : * 或与网页关键字同名（如 hidden、class）">
+      </label>
+      <label class="field">描述
+        <textarea id="repo-desc-input" rows="3" maxlength="500"
+                  placeholder="这个仓库里放了什么？">{{ repo.description or "" }}</textarea>
+      </label>
+      <div class="bio-editor-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="repo-edit-cancel">取消</button>
+        <button type="button" class="btn btn-green btn-sm" id="repo-edit-save">保存</button>
+      </div>
+    </div>
+    {% endif %}
+    <div class="repo-actions">
+      <button id="star-btn" class="btn {% if starred %}btn-green{% else %}btn-outline{% endif %} magnetic" data-repo-id="{{ repo.id }}">
+        <span class="star-icon">{% if starred %}★{% else %}☆{% endif %}</span>
+        <span id="star-count">{{ star_count }}</span> 星标
+      </button>
+      <a href="/r/{{ owner }}/{{ repo.name }}/archive" class="btn btn-outline magnetic">⬇️ 打包下载</a>
+      <a href="#comments" class="btn btn-ghost scroll-down">💬 评论</a>
+      {% if is_owner %}
+      <button type="button" class="btn btn-ghost readme-edit-open"
+              data-owner="{{ owner }}" data-name="{{ repo.name }}">✏️ 编辑 README</button>
+      <form action="/r/{{ owner }}/{{ repo.name }}/visibility" method="post" class="inline-form">
+        <button class="btn btn-ghost" type="submit" title="切换公开/私有">
+          {{ '🌐 设为公开' if repo.is_private else '🔒 设为私有' }}
+        </button>
+      </form>
+      <button class="btn btn-ghost danger-btn" id="delete-repo-btn" type="button"
+              data-name="{{ repo.name }}" data-owner="{{ owner }}">🗑 删除仓库</button>
+      {% endif %}
+    </div>
+    <div class="repo-stats">
+      <div class="stat js-reveal"><span class="stat-num">{{ file_count }}</span><span class="stat-label">文件</span></div>
+      <div class="stat js-reveal"><span class="stat-num">{{ total_size|size }}</span><span class="stat-label">总大小</span></div>
+      <div class="stat js-reveal"><span class="stat-num">{{ total_downloads }}</span><span class="stat-label">下载</span></div>
+      <div class="stat js-reveal"><span class="stat-num">{{ repo.updated_at|reltime }}</span><span class="stat-label">更新</span></div>
+    </div>
+    </div>
+    <div class="repo-cover-square" id="repo-cover-el"
+         data-repo-id="{{ repo.id }}" data-owner="{{ owner }}" data-name="{{ repo.name }}"
+         data-cover="{{ repo.cover or '' }}"
+         style="{{ cover_style(repo.cover) }}"></div>
+    {% if is_owner %}<script>
+      window.__fhCover = {{ parse_cover(repo.cover) | tojson }};
+    </script>{% endif %}
+  </div>
+</section>
+
+{% if msg %}<div class="flash-msg" data-msg="{{ msg }}">{{ msg }}</div>{% endif %}
+
+<section class="file-area">
+  <div class="file-area-inner">
+    <div class="repo-columns">
+      <div class="repo-main">
+
+        {% if readme_html %}
+        <article class="readme js-card" id="readme">
+          <h2 class="readme-title">📄 README
+            {% if is_owner %}<button type="button" class="readme-edit-link readme-edit-open"
+              data-owner="{{ owner }}" data-name="{{ repo.name }}">编辑</button>{% endif %}
+          </h2>
+          <div class="md-body">{{ readme_html|safe }}</div>
+        </article>
+        {% endif %}
+
+        <div class="file-browser js-card">
+          <div class="file-browser-head">
+            <div class="crumbs">
+              <a href="/r/{{ owner }}/{{ repo.name }}">📦 {{ repo.name }}</a>
+              {% for c in crumbs %}
+                {% if c.name %}<span class="crumb-sep">/</span><a href="?dir={{ c.dir|urlencode }}">{{ c.name }}</a>
+                {% else %}<span class="crumb-sep">/</span><span class="crumb-here">{{ aliases.get(prefix.rstrip('/'), dir.split('/')[-1]) }}</span>{% endif %}
+              {% endfor %}
+            </div>
+            <div class="file-tools">
+              {% if files and is_owner %}
+              <label class="tool-check">
+                <input type="checkbox" id="select-all"> 全选
+              </label>
+              {% endif %}
+              <label class="tool-label">排序
+                {# A native <select> cannot be styled: the closed control takes
+                   the page's CSS but the popup list is drawn by the OS, so on
+                   Windows and macOS it stays a light-grey system sheet no
+                   matter what the page asks for. This is a button plus a list
+                   the page renders itself, with the original <select> kept
+                   hidden as the value store so the sort logic reads it exactly
+                   as before. #}
+                <div class="fh-select" id="file-sort-dd">
+                  <select id="file-sort" class="fh-select-native" tabindex="-1" aria-hidden="true">
+                    <option value="name">名称</option>
+                    <option value="size">大小</option>
+                    <option value="date">时间</option>
+                  </select>
+                  <button type="button" class="fh-select-btn" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="fh-select-value">名称</span>
+                  </button>
+                  {# popover="manual": the list opens in the browser's top layer, so
+                     the card's `overflow: hidden` (for its rounded corners)
+                     cannot clip it. It used to be an absolutely-positioned child
+                     and the card cut the menu off at its own edge.
+
+                     No `hidden` attribute: a popover's own state controls
+                     visibility, and leaving `hidden` on it kept the menu at 0x0
+                     even while open, because showPopover() does not clear the
+                     attribute and [hidden] still applied. #}
+                  <ul class="fh-select-list" role="listbox" popover="manual">
+                    <li role="option" data-value="name" aria-selected="true" class="is-selected">名称</li>
+                    <li role="option" data-value="size" aria-selected="false">大小</li>
+                    <li role="option" data-value="date" aria-selected="false">时间</li>
+                  </ul>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {% if files and is_owner %}
+          <div class="bulk-bar" id="bulk-bar" hidden>
+            <span id="bulk-count">已选 0 项</span>
+            <button class="btn btn-sm danger-btn" id="bulk-delete" type="button">删除所选</button>
+          </div>
+          {% endif %}
+
+          <ul class="file-list" id="file-list">
+            {% if prefix %}
+            <li class="file-row dir-row" data-name=".." data-size="0" data-date="0">
+              <span class="file-check"></span>
+              <a class="file-name" href="?dir={{ prefix.rstrip('/')|urlencode }}">↩︎ ..</a><span></span><span></span>
+            </li>
+            {% endif %}
+            {% for d in folders %}
+            <li class="file-row dir-row" data-name="{{ d.name }}" data-size="{{ d.size }}" data-date="0"
+                data-folder-path="{{ prefix }}{{ d.name }}">
+              <span class="file-check"></span>
+              <a class="file-name" href="?dir={{ (prefix ~ d.name)|urlencode }}">📁 {{ d.display }}</a>
+              <span class="file-size">{{ d.count }} 项</span>
+              <span class="file-date">
+                {% if is_owner %}<button class="icon-btn rename-folder" title="重命名显示名" data-path="{{ prefix }}{{ d.name }}" data-display="{{ d.display }}">✏️</button>{% endif %}
+              </span>
+            </li>
+            {% endfor %}
+            {% for f in files %}
+            <li class="file-row" data-name="{{ f.name }}" data-size="{{ f.size }}" data-date="{{ f.created_at }}"
+                data-file-id="{{ f.id }}" data-tags="{{ f.tags }}" data-note="{{ f.note }}">
+              {% if is_owner %}
+              <label class="file-check"><input type="checkbox" class="row-check" value="{{ f.id }}"></label>
+              {% else %}
+              <span class="file-check"></span>
+              {% endif %}
+              <a class="file-name" href="/file/{{ f.id }}/download"
+                 data-preview="/file/{{ f.id }}/raw" data-mime="{{ f.mime }}" data-path="{{ f.path }}">
+                {% if f.thumb %}
+                <img class="row-thumb" src="/media/thumb/{{ f.thumb }}" alt="" loading="lazy">
+                {% else %}
+                <span class="row-icon">{{ type_icon(f.mime) }}</span>
+                {% endif %}
+                {{ f.name }}
+                {% if f.tags %}<span class="tag-chips">{% for t in f.tags.split(',') if t.strip() %}<span class="tag">#{{ t.strip() }}</span>{% endfor %}</span>{% endif %}
+              </a>
+              <span class="file-size">{{ f.size|size }}</span>
+              <span class="file-date">{{ f.created_at|reltime }}</span>
+              {% if is_owner %}
+              <span class="row-actions">
+                <button class="icon-btn edit-meta" title="标签与备注"
+                        data-id="{{ f.id }}" data-tags="{{ f.tags }}" data-note="{{ f.note }}"
+                        data-name="{{ f.name }}">🏷</button>
+                <form action="/file/{{ f.id }}/delete" method="post" class="inline-form file-del"
+                      data-name="{{ f.name }}">
+                  <button type="submit" class="icon-btn" title="删除">🗑</button>
+                </form>
+              </span>
+              {% endif %}
+            </li>
+            {% endfor %}
+            {% if not files and not folders and not prefix %}
+            <li class="file-row empty-row"><span class="file-check"></span><span class="file-name">此仓库还没有文件</span><span></span><span></span></li>
+            {% endif %}
+          </ul>
+        </div>
+
+        <section class="comments js-card" id="comments">
+          <h2 class="readme-title">💬 评论（{{ comments|length }}）</h2>
+          <div id="comment-list">
+            {% for cm in comments %}
+            <div class="comment" data-comment-id="{{ cm.id }}"
+                 data-author="{{ cm.username }}" data-mine="{{ '1' if user and user.username == cm.username else '0' }}">
+              {% if cm.avatar %}
+              <img class="avatar-img" src="{{ avatar_url(cm.avatar) }}" alt="">
+              {% else %}
+              <span class="avatar">{{ cm.username[:1]|upper }}</span>
+              {% endif %}
+              <div class="comment-body">
+                <div class="comment-meta">
+                  <a href="/u/{{ cm.username }}">{{ cm.username }}</a>
+                  <span class="comment-time">{{ cm.created_at|reltime }}</span>
+                </div>
+                <p class="comment-text">{{ cm.body }}</p>
+                {% if user and user.username == cm.username %}
+                <div class="comment-actions">
+                  <button class="text-btn comment-edit" type="button">编辑</button>
+                  <span class="action-sep">|</span>
+                  <button class="text-btn comment-del" type="button">删除</button>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            {% else %}
+            <p class="comment-empty" id="comment-empty">还没有评论，来抢沙发 →</p>
+            {% endfor %}
+          </div>
+          {% if user %}
+          <form id="comment-form" class="comment-form" data-repo-id="{{ repo.id }}">
+            <textarea id="comment-input" rows="3" maxlength="2000" placeholder="说点什么…" required></textarea>
+            <button type="submit" class="btn btn-green">发表评论</button>
+          </form>
+          {% else %}
+          <p class="comment-login"><a href="#" data-dialog-open="login">登录</a> 后参与评论</p>
+          {% endif %}
+        </section>
+      </div>
+
+      <aside class="repo-side">
+        {% if is_owner %}
+        <form id="upload-form" class="upload-zone js-card" action="/r/{{ owner }}/{{ repo.name }}/upload" method="post" enctype="multipart/form-data">
+          <div class="upload-icon">⬆️</div>
+          <p class="upload-hint">拖拽文件到这里，或点击选择（支持多选，单文件 ≤ 200 MB）</p>
+          <p class="upload-tip">文件名可含路径，如 <code>设计稿/首页.png</code>，会自动建文件夹</p>
+          <input type="file" id="file-input" name="files" multiple hidden>
+          <button type="button" class="btn btn-green magnetic" id="upload-pick">选择文件</button>
+          <div class="upload-progress" hidden><div class="upload-bar"><div class="upload-bar-fill"></div></div><span class="upload-pct">0%</span></div>
+          <noscript><button type="submit" class="btn btn-outline">开始上传</button></noscript>
+        </form>
+        {% endif %}
+        {% if type_stats %}
+        <div class="side-card js-card">
+          <h3 class="side-title">📊 类型分布</h3>
+          <div class="type-bars">
+            {% for t in type_stats %}
+            <div class="type-row">
+              <span class="type-label">{{ t.icon }} {{ t.count }} 个</span>
+              <div class="type-track"><div class="type-fill" data-pct="{{ t.pct }}"></div></div>
+              <span class="type-pct">{{ t.pct }}%</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="side-card js-card">
+          <h3 class="side-title">📈 仓库信息</h3>
+          <ul class="side-list">
+            <li><span>创建</span><strong>{{ repo.created_at|reltime }}</strong></li>
+            <li><span>更新</span><strong>{{ repo.updated_at|reltime }}</strong></li>
+            <li><span>文件数</span><strong>{{ file_count }}</strong></li>
+            <li><span>总大小</span><strong>{{ total_size|size }}</strong></li>
+            <li><span>下载量</span><strong>{{ total_downloads }}</strong></li>
+            <li><span>可见性</span><strong>{{ '🔒 私有' if repo.is_private else '🌐 公开' }}</strong></li>
+          </ul>
+        </div>
+
+        {% if is_owner %}
+        <div class="side-card js-card">
+          <h3 class="side-title">🎨 仓库封面</h3>
+          {# One panel: the cover itself is the control. Clicking it opens the file
+             picker (which now leads straight into the crop dialog), and the row
+             beneath says what the current cover is and offers a way back to the
+             default. The old layout split this across three elements — an upload
+             button, a separate "调整封面取景" button opening a second dialog, and
+             a bare "当前为自定义封面 / 恢复默认" line — which asked the owner to
+             work out which of two dialogs did what. #}
+          <form class="cover-upload" method="post"
+                action="/r/{{ owner }}/{{ repo.name }}/cover" enctype="multipart/form-data">
+            <input type="file" name="cover" id="cover-file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+            <button type="button" class="cover-preview" id="cover-pick"
+                    aria-label="{{ '更换封面图片' if cover_is_upload(repo.cover) else '上传封面图片' }}">
+              {# cover_css, not cover_style: this is a plain element with no ::after
+                 layer, and cover_style deliberately emits `background-image: none`
+                 because the picture is painted by the card's pseudo-element. Using
+                 it here left the preview empty. cover_css is the self-contained
+                 form — the image and the blurred backdrop both hang off the one
+                 element. #}
+              <span class="cover-preview-art" data-cover-preview
+                    style="{{ cover_css(repo.cover) }}"></span>
+              <span class="cover-preview-veil" aria-hidden="true">
+                <span class="cover-preview-ico">📁</span>
+                <span class="cover-preview-text">{{ '更换封面' if cover_is_upload(repo.cover) else '上传封面' }}</span>
+              </span>
+            </button>
+            <span class="banner-hint">仅支持 JPG / PNG，不超过 10 MB。上传后可拖动和缩放，方框内为封面。</span>
+          </form>
+          {# Preset picker. Each swatch previews the gradient it applies, and the
+             chosen one is saved straight away — a preset has no framing to
+             tune, so a separate save button would be a step with nothing to do. #}
+          <div class="cover-presets" role="radiogroup" aria-label="封面预设">
+            {% for key, spec in COVERS.items() %}
+            <form method="post" action="/r/{{ owner }}/{{ repo.name }}/cover/preset" class="cover-preset-form">
+              <input type="hidden" name="preset" value="{{ key }}">
+              <button type="submit" role="radio"
+                      aria-checked="{{ 'true' if repo.cover == key else 'false' }}"
+                      class="cover-preset {% if repo.cover == key %}current{% endif %}"
+                      style="background: {{ spec.css }}" title="{{ spec.label }}"
+                      aria-label="{{ spec.label }}"></button>
+            </form>
+            {% endfor %}
+          </div>
+          {% if cover_is_upload(repo.cover) %}
+          <div class="cover-current">
+            <span class="cover-current-label">当前为自定义封面</span>
+            <form method="post" action="/r/{{ owner }}/{{ repo.name }}/cover/reset" class="inline-form">
+              <button type="submit" class="btn btn-ghost btn-sm danger-btn">恢复默认</button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="side-card js-card">
+          <h3 class="side-title">🔗 接口</h3>
+          <ul class="side-links">
+            <li>
+              <a href="/api/repos/{{ owner }}/{{ repo.name }}">
+                <span class="side-ico" aria-hidden="true">🧩</span>
+                <span class="side-label">JSON API</span>
+                <span class="side-arrow" aria-hidden="true">→</span>
+              </a>
+            </li>
+            <li>
+              <a href="/r/{{ owner }}/{{ repo.name }}/archive">
+                <span class="side-ico" aria-hidden="true">📦</span>
+                <span class="side-label">打包下载</span>
+                <span class="side-arrow" aria-hidden="true">→</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block overlay %}
+<div id="preview-modal" hidden>
+  <div class="preview-backdrop" data-close></div>
+  <div class="preview-panel">
+    <button class="icon-btn preview-close" data-close aria-label="关闭">✕</button>
+    <div class="preview-content" id="preview-content"></div>
+    <div class="preview-foot">
+      <span id="preview-name"></span>
+      <a id="preview-download" class="btn btn-green btn-sm" href="#">下载</a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

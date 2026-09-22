@@ -1,0 +1,31 @@
+# Runtime state. The database and every uploaded file are produced by running
+# the site, not by the source — they belong to a deployment's volume, not to
+# the repository.
+#
+# This matters more than usual here because the backup below holds every
+# account that ever existed in the local database, including the password
+# hashes from before they were cleared. Committing it to a public repository
+# publishes them.
+filehub.db
+filehub.db.backup-*
+*.backup-*
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Logs
+*.log
+server.log
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

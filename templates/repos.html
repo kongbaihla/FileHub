@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block page %}repos{% endblock %}
+{% block title %}仓库{% endblock %}
+{% block content %}
+<section class="repo-hero">
+  <div class="repo-hero-inner">
+    <h1 class="repo-title split-hero-sm">所有仓库</h1>
+    <p class="repo-sub">共 {{ total }} 个公开仓库 · 按时间、星标、名称或体积浏览</p>
+    <div class="sort-tabs" id="sort-tabs" data-sort-endpoint="/api/sort/repos">
+      <button type="button" class="sort-tab {% if sort == 'updated' %}active{% endif %}"
+              data-sort="updated"{% if sort == 'updated' %} aria-current="true"{% endif %}>最近更新</button>
+      <button type="button" class="sort-tab {% if sort == 'stars' %}active{% endif %}"
+              data-sort="stars"{% if sort == 'stars' %} aria-current="true"{% endif %}>最多星标</button>
+      <button type="button" class="sort-tab {% if sort == 'size' %}active{% endif %}"
+              data-sort="size"{% if sort == 'size' %} aria-current="true"{% endif %}>体积最大</button>
+      <button type="button" class="sort-tab {% if sort == 'name' %}active{% endif %}"
+              data-sort="name"{% if sort == 'name' %} aria-current="true"{% endif %}>名称</button>
+    </div>
+  </div>
+</section>
+<section class="repos">
+  <div class="repos-inner">
+    {% if people %}
+    <div class="result-head-row">
+      <h2 class="result-head split-why">用户</h2>
+      <a class="btn btn-outline btn-sm" href="/people">全部用户 →</a>
+    </div>
+    {# The four-across grid, and no bio: this strip is a sampler of who is here,
+       not the directory. Dropping the bio makes each card a single compact row
+       and keeps the repository grid — the page's real content — near the fold. #}
+    {% set grid_class = "" %}
+    {% set show_bio = false %}
+    {% include "_people_cards.html" %}
+    {% endif %}
+
+    <h2 class="result-head split-why">仓库</h2>
+    {% if repos %}
+    <div class="sort-panel" id="sort-panel">
+      {% include "_repo_cards.html" %}
+    </div>
+    {% else %}
+    <div class="empty-state js-card">
+      <p>还没有任何公开仓库。</p>
+      <a href="/new" class="btn btn-green">创建第一个 →</a>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

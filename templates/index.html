@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block page %}home{% endblock %}
+{% block title %}首页{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <div class="hero-bg" aria-hidden="true">
+    <canvas class="hero-tiles" id="hero-tiles"></canvas>
+  </div>
+  <div class="hero-inner">
+    <p class="hero-kicker js-reveal">让我们开始吧</p>
+    <h1 class="hero-title split-hero">托管你的<br>每一份文件</h1>
+    <div class="hero-sub js-reveal">
+      <p class="hero-sub split-hero">像 GitHub 一样组织你的自定义文件<br>一切文件都值得被好好安放。</p>
+    </div>
+    <div class="hero-cta js-reveal">
+      {% if user %}
+      <a href="/u/{{ user.username }}" class="btn btn-green btn-lg magnetic">我的空间 →</a>
+      {% else %}
+      <a href="/register" class="btn btn-green btn-lg magnetic">立即开始</a>
+      {% endif %}
+      <a href="#repos" class="btn btn-outline btn-lg magnetic scroll-down">探索仓库 ↓</a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat js-reveal"><span class="stat-num" data-count="{{ stats.repos }}">0</span><span class="stat-label">仓库</span></div>
+      <div class="stat js-reveal"><span class="stat-num" data-count="{{ stats.files }}">0</span><span class="stat-label">文件总数</span></div>
+      <div class="stat js-reveal"><span class="stat-num" data-count="{{ stats.users }}">0</span><span class="stat-label">用户</span></div>
+      <div class="stat js-reveal"><span class="stat-num" data-count="{{ stats.downloads }}">0</span><span class="stat-label">下载总数</span></div>
+    </div>
+  </div>
+
+  <div class="marquee" id="marquee">
+  <div class="marquee-pill">
+    <button type="button" class="marquee-play" id="marquee-play" aria-label="暂停滚动">
+      <svg class="icon-pause" width="16" height="16" viewBox="0 0 56 56" fill="currentColor" aria-hidden="true">
+        <rect x="18" y="16" width="7" height="24" rx="2"/>
+        <rect x="31" y="16" width="7" height="24" rx="2"/>
+      </svg>
+      <svg class="icon-play" width="16" height="16" viewBox="0 0 56 56" fill="currentColor" aria-hidden="true">
+        <path d="m23.76 36.62c.45 0 .86-.13 1.42-.46l10.92-6.33c.86-.5 1.36-1.02 1.36-1.84 0-.81-.5-1.33-1.36-1.83l-10.92-6.33c-.56-.33-.97-.47-1.42-.47-.93 0-1.76.72-1.76 1.94v13.36c0 1.23.83 1.94 1.76 1.94z"/>
+      </svg>
+    </button>
+
+    <div class="marquee-viewport" id="marquee-viewport">
+      <div class="marquee-track" id="marquee-track">
+        <span class="marquee-set">
+          <span class="marquee-item">🖼️ midi</span>       <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">🎬 vsqx</span>        <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">🗜️ vpr</span>      <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">📊 zip</span>       <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">⚙️ rar</span>         <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">🧩 png</span>        <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">📐 jpg</span>        <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">🧪 mp3</span>    <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">📷 wav</span>   <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">🔤 mp4</span>       <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">🧠 笔记</span>       <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+          <span class="marquee-item">🎭 皮肤</span>       <span class="marquee-item">Ciallo～(∠・ω< )⌒★</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="marquee-dots" id="marquee-dots" role="tablist" aria-label="文件类型分组">
+      <span class="marquee-dots-bg" aria-hidden="true"></span>
+    </div>
+  </div>
+</div>
+</section>
+
+
+
+<section class="why" id="why">
+  <div class="why-inner">
+    <p class="why-text split-why">上传不该是吞噬一切的网盘黑洞。FileHub 用仓库整理你的素材、文档与珍藏，用星标标记喜爱，用评论交流心得，用搜索在瞬间找回任何一份文件——为收藏而生的托管体验，从此井井有条。</p>
+  </div>
+</section>
+
+<section class="features">
+  <div class="features-inner">
+    <h2 class="section-title split-why">四个核心能力</h2>
+    <div class="feature-grid">
+      <article class="feature-card js-card"><div class="feature-icon">🗂️</div><h3>仓库式分组</h3><p>按项目建仓库，文件夹层级自由组织，README 介绍你的收藏。</p></article>
+      <article class="feature-card js-card"><div class="feature-icon">⭐</div><h3>星标与统计</h3><p>给仓库点星，下载次数、文件体积、更新时间一目了然。</p></article>
+      <article class="feature-card js-card"><div class="feature-icon">💬</div><h3>评论与搜索</h3><p>在仓库下交流讨论，按名称、描述、路径全文检索。</p></article>
+      <article class="feature-card js-card"><div class="feature-icon">⚡</div><h3>任意格式</h3><p>图片、视频、音频、文档在线预览，其余一键下载，单文件最大 200 MB。</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="repos" id="repos">
+  <div class="repos-inner">
+    <div class="repos-head">
+      <h2 class="section-title split-why">最新仓库</h2>
+      <a href="/search" class="btn btn-ghost">查看全部 →</a>
+    </div>
+    {% if repos %}
+    <div class="repo-grid">
+      {% for r in repos %}
+      <a class="repo-card js-card" href="/r/{{ r.username }}/{{ r.name }}">
+        <div class="repo-cover-square" style="{{ cover_css(r.cover) }}"></div>
+        <div class="repo-card-body">
+          <div class="repo-card-head">
+            <h3>{{ r.name }}</h3>
+            <span class="repo-star">★ {{ r.star_count }}</span>
+          </div>
+          <p class="repo-desc">{{ r.description or "（暂无描述）" }}</p>
+          <div class="repo-meta"><span>📦 {{ r.file_count }} 文件</span><span>💾 {{ r.total_size|size }}</span><span>🕐 {{ r.updated_at|reltime }}</span></div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state js-card">
+      <p>还没有任何仓库。</p>
+      <a href="/register" class="btn btn-green">注册并创建第一个 →</a>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

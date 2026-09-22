@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block page %}auth{% endblock %}
+{% block title %}登录{% endblock %}
+{% block content %}
+{# See new_repo.html: the dialog is built by app.js, and this route only tells
+   it which one to open and carries any validation error back into it. #}
+<main data-dialog-reopen="login"
+      {% if error %}data-dialog-error="{{ error }}"{% endif %}></main>
+{% endblock %}

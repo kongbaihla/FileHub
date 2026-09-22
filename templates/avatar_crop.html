@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>调整头像 · FileHub</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_v }}">
+<style>
+  body { overflow: hidden; }
+  .cropper-wrap {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 22px;
+    background: var(--bg); padding: 24px;
+  }
+  .cropper-head { text-align: center; }
+  .cropper-head h1 { font-size: 1.4rem; margin-bottom: 6px; }
+  .cropper-head p { color: var(--muted); font-size: .9rem; }
+  .crop-stage {
+    position: relative; width: min(560px, 90vw); height: min(400px, 55vh);
+    background: #08090a; border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; cursor: grab; touch-action: none; user-select: none;
+  }
+  .crop-stage.dragging { cursor: grabbing; }
+  .crop-stage img {
+    position: absolute; transform-origin: 0 0; pointer-events: none;
+    image-rendering: auto; max-width: none;
+  }
+  .crop-shade { position: absolute; inset: 0; pointer-events: none; }
+  .crop-box {
+    position: absolute; border: 2px solid var(--green);
+    box-shadow: 0 0 0 9999px rgba(6, 8, 7, .72);
+    cursor: move; box-sizing: border-box;
+  }
+  .crop-box::before, .crop-box::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    border: 1px dashed rgba(255,255,255,.25);
+  }
+  .crop-box::before { border-width: 0 1px; left: 33.33%; right: 33.33%; border-left: 1px dashed rgba(255,255,255,.2); border-right: 1px dashed rgba(255,255,255,.2); }
+  .crop-box::after { border-width: 1px 0; top: 33.33%; bottom: 33.33%; border-top: 1px dashed rgba(255,255,255,.2); border-bottom: 1px dashed rgba(255,255,255,.2); }
+  .crop-handle {
+    position: absolute; width: 14px; height: 14px; background: var(--green);
+    border-radius: 3px;
+  }
+  .crop-handle[data-h="nw"] { top: -8px; left: -8px; cursor: nwse-resize; }
+  .crop-handle[data-h="ne"] { top: -8px; right: -8px; cursor: nesw-resize; }
+  .crop-handle[data-h="sw"] { bottom: -8px; left: -8px; cursor: nesw-resize; }
+  .crop-handle[data-h="se"] { bottom: -8px; right: -8px; cursor: nwse-resize; }
+  .cropper-controls {
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap; justify-content: center;
+  }
+  .zoom-row { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .85rem; }
+  .zoom-row input[type=range] { accent-color: var(--green); width: 160px; }
+  .shape-toggle { display: flex; gap: 6px; }
+  .shape-btn {
+    background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: .85rem;
+    font-family: var(--font); font-weight: 600;
+  }
+  .shape-btn.active { border-color: var(--green); color: var(--green); background: #0ae44812; }
+  .cropper-actions { display: flex; gap: 12px; }
+  .crop-preview {
+    width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+    border: 2px solid var(--green); background: var(--panel);
+  }
+  .preview-row { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="cropper-wrap">
+  <div class="cropper-head">
+    <h1>调整你的头像</h1>
+    <p>拖动方框选择区域 · 拖拽四角可缩放 · 滚轮或滑杆缩放图片</p>
+  </div>
+
+  <div class="preview-row">
+    <img class="crop-preview" id="crop-preview" alt="预览">
+    <span>这是最终效果（圆形显示）</span>
+  </div>
+
+  <div class="crop-stage" id="crop-stage">
+    <img id="crop-image" alt="">
+    <div class="crop-box" id="crop-box">
+      <span class="crop-handle" data-h="nw"></span>
+      <span class="crop-handle" data-h="ne"></span>
+      <span class="crop-handle" data-h="sw"></span>
+      <span class="crop-handle" data-h="se"></span>
+    </div>
+  </div>
+
+  <div class="cropper-controls">
+    <div class="zoom-row">
+      <span>缩放</span>
+      <input type="range" id="zoom" min="0.2" max="4" step="0.01" value="1">
+    </div>
+    <div class="shape-toggle">
+      <span class="shape-fixed">正方形裁剪</span>
+    </div>
+  </div>
+
+  <div class="cropper-actions">
+    <a href="/u/{{ username }}" class="btn btn-ghost">取消</a>
+    <button type="button" class="btn btn-green magnetic" id="crop-save">保存头像</button>
+  </div>
+
+  <div class="preset-avatars">
+    <span class="preset-label">或使用默认头像</span>
+    <div class="preset-row" id="preset-row">
+      {% for i in range(1, 7) %}
+      <button type="button" class="preset-avatar" data-preset="{{ i }}" aria-label="默认头像 {{ i }}">
+        <img src="/static/img/avatar-{{ i }}.svg" alt="">
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script src="/static/vendor/gsap/gsap.min.js"></script>
+<script>
+(function () {
+  const stage = document.getElementById("crop-stage");
+  const img = document.getElementById("crop-image");
+  const box = document.getElementById("crop-box");
+  const zoom = document.getElementById("zoom");
+  const preview = document.getElementById("crop-preview");
+
+  let ratio = 1;          // crop box width / height
+  let natural = { w: 1, h: 1 };
+  let imgScale = 1, imgX = 0, imgY = 0;
+  let bx = 0, by = 0, bw = 0, bh = 0;
+  let dragMode = null, start = null;
+
+  gsap.from(".cropper-wrap > *", {
+    autoAlpha: 0, y: 24, duration: 0.5, stagger: 0.07, ease: "power3.out",
+  });
+
+  function layoutStage() {
+    const r = stage.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+
+  function clampImage() {
+    const s = layoutStage();
+    const dw = natural.w * imgScale, dh = natural.h * imgScale;
+    // keep the image covering the crop box
+    imgX = Math.min(bx, Math.max(imgX, bx + bw - dw));
+    imgY = Math.min(by, Math.max(imgY, by + bh - dh));
+    img.style.transform = `translate(${imgX}px, ${imgY}px) scale(${imgScale})`;
+  }
+
+  function fitCropBox() {
+    const s = layoutStage();
+    bh = Math.min(s.h * 0.7, s.w * 0.7 / ratio);
+    bw = bh * ratio;
+    bx = (s.w - bw) / 2;
+    by = (s.h - bh) / 2;
+    draw();
+  }
+
+  function draw() {
+    box.style.left = bx + "px";
+    box.style.top = by + "px";
+    box.style.width = bw + "px";
+    box.style.height = bh + "px";
+    clampImage();
+    updatePreview();
+  }
+
+  function updatePreview() {
+    // Render exactly what the server will see: crop region -> square JPEG.
+    const c = document.createElement("canvas");
+    const S = 200;
+    c.width = S; c.height = S;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#0e100f";
+    ctx.fillRect(0, 0, S, S);
+    const sx = (bx - imgX) / imgScale;
+    const sy = (by - imgY) / imgScale;
+    const sw = bw / imgScale;
+    const sh = bh / imgScale;
+    try {
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, S, S);
+      preview.src = c.toDataURL("image/jpeg", 0.85);
+    } catch (e) { /* tainted canvas cannot happen for same-origin uploads */ }
+  }
+
+  function init(src) {
+    img.onload = () => {
+      natural = { w: img.naturalWidth, h: img.naturalHeight };
+      const s = layoutStage();
+      // Initial zoom: fit the shorter side to the stage
+      imgScale = Math.max(s.w / natural.w, s.h / natural.h);
+      imgX = (s.w - natural.w * imgScale) / 2;
+      imgY = (s.h - natural.h * imgScale) / 2;
+      zoom.value = 1;
+      fitCropBox();
+    };
+    img.src = src;
+  }
+
+  /* ---- drag the crop box ----
+     Pointer capture routes events to the captured element, not to document,
+     so the move/up listeners live on window and every exit path clears the
+     drag state. Leaving dragMode set made the box follow the cursor forever
+     after a click. */
+  function beginDrag(mode, e, extra) {
+    e.preventDefault();
+    dragMode = mode;
+    start = Object.assign({ x: e.clientX, y: e.clientY, bx, by, bw, bh }, extra || {});
+    stage.classList.add("dragging");
+    try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  }
+
+  function endDrag() {
+    if (!dragMode) return;
+    dragMode = null;
+    start = null;
+    stage.classList.remove("dragging");
+  }
+
+  box.addEventListener("pointerdown", (e) => {
+    if (e.target.classList.contains("crop-handle")) return;
+    beginDrag("move", e);
+  });
+
+  box.querySelectorAll(".crop-handle").forEach((h) => {
+    h.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      beginDrag(h.dataset.h, e);
+    });
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!dragMode) return;
+    const s = layoutStage();
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+
+    if (dragMode === "move") {
+      bx = Math.max(-bw * 0.5, Math.min(start.bx + dx, s.w - bw * 0.5));
+      by = Math.max(-bh * 0.5, Math.min(start.by + dy, s.h - bh * 0.5));
+    } else {
+      // Resize from a corner, preserving the aspect ratio.
+      const growX = dragMode.includes("e") ? dx : -dx;
+      const growY = dragMode.includes("s") ? dy : -dy;
+      const delta = (growX * ratio + growY) / 2;
+      let newW = Math.max(60, start.bw + delta * ratio);
+      let newH = newW / ratio;
+      const maxW = s.w * 1.5, maxH = s.h * 1.5;
+      if (newW > maxW) { newW = maxW; newH = newW / ratio; }
+      if (newH > maxH) { newH = maxH; newW = newH * ratio; }
+
+      if (dragMode.includes("w")) bx = start.bx + (start.bw - newW);
+      if (dragMode.includes("n")) by = start.by + (start.bh - newH);
+      bw = newW; bh = newH;
+    }
+    draw();
+  });
+
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+  window.addEventListener("blur", endDrag);
+  document.addEventListener("mouseleave", endDrag);
+
+  /* ---- drag the image inside the box ---- */
+  stage.addEventListener("pointerdown", (e) => {
+    if (e.target === box || e.target.classList.contains("crop-handle")) return;
+    beginDrag("image", e, { imgX, imgY });
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (dragMode !== "image") return;
+    imgX = start.imgX + (e.clientX - start.x);
+    imgY = start.imgY + (e.clientY - start.y);
+    draw();
+  });
+
+  /* ---- zoom ---- */
+  zoom.addEventListener("input", () => {
+    const s = layoutStage();
+    const min = Math.max(s.w / natural.w, s.h / natural.h);
+    const target = min * parseFloat(zoom.value);
+    // zoom about the crop box centre so the framing stays put
+    const cx = bx + bw / 2, cy = by + bh / 2;
+    const relX = (cx - imgX) / imgScale;
+    const relY = (cy - imgY) / imgScale;
+    imgScale = target;
+    imgX = cx - relX * imgScale;
+    imgY = cy - relY * imgScale;
+    draw();
+  });
+
+  stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const next = Math.max(0.2, Math.min(4, parseFloat(zoom.value) - e.deltaY * 0.001));
+    zoom.value = next;
+    zoom.dispatchEvent(new Event("input"));
+  }, { passive: false });
+
+  /* ---- save ---- */
+  document.getElementById("crop-save").addEventListener("click", () => {
+    const btn = document.getElementById("crop-save");
+    btn.textContent = "保存中…";
+    btn.disabled = true;
+    const c = document.createElement("canvas");
+    const S = 512;
+    c.width = S; c.height = S;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#0e100f";
+    ctx.fillRect(0, 0, S, S);
+    const sx = (bx - imgX) / imgScale;
+    const sy = (by - imgY) / imgScale;
+    const sw = bw / imgScale;
+    const sh = bh / imgScale;
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, S, S);
+
+    c.toBlob(async (blob) => {
+      const fd = new FormData();
+      fd.append("avatar", blob, "avatar.jpg");
+      try {
+        const res = await fetch("/settings/avatar", { method: "POST", body: fd });
+        // The endpoint responds with a 303 redirect; fetch follows it.
+        window.location.href = "/u/{{ username }}?msg=" + encodeURIComponent("头像已更新");
+      } catch (err) {
+        btn.textContent = "保存失败，重试";
+        btn.disabled = false;
+      }
+    }, "image/jpeg", 0.9);
+  });
+
+  window.addEventListener("resize", () => { fitCropBox(); });
+
+  /* ---- default avatars ---- */
+  document.querySelectorAll(".preset-avatar").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const res = await fetch("/settings/avatar/preset/" + b.dataset.preset, { method: "POST" });
+      if (!res.ok) { alert("设置失败，请重试"); return; }
+      window.location.href = "/u/{{ username }}?msg=" + encodeURIComponent("已使用默认头像");
+    });
+  });
+
+  // entry: read the file handed over from the profile page
+  const raw = sessionStorage.getItem("fh-avatar-src");
+  if (raw) {
+    sessionStorage.removeItem("fh-avatar-src");
+    init(raw);
+  } else {
+    window.location.href = "/u/{{ username }}";
+  }
+})();
+</script>
+</body>
+</html>

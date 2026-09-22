@@ -1,0 +1,29 @@
+{# One grid of repository cards, shared by the search page and the discover API.
+   Extracted so the tab switch can fetch the same markup the page renders —
+   the alternative is a JavaScript copy of this that has to be kept in step. #}
+<div class="repo-grid">
+  {% for r in repos %}
+  <a class="repo-card js-card" href="/r/{{ r.username }}/{{ r.name }}">
+    {# cover_css returns whole declarations, not a value for the `background`
+       shorthand — an uploaded cover needs two layers plus the --cover-src
+       variable the backdrop reads, which the shorthand cannot carry. #}
+    <div class="repo-cover-square" style="{{ cover_css(r.cover) }}"></div>
+    <div class="repo-card-body">
+      <div class="repo-card-head">
+        <h3>{{ r.name }}</h3>
+        <span class="repo-star">★ {{ r.star_count }}</span>
+      </div>
+      <p class="repo-desc">{{ r.description or "（暂无描述）" }}</p>
+      <div class="repo-meta">
+        <span>📦 {{ r.file_count }} 文件</span>
+        <span>💾 {{ r.total_size|size }}</span>
+        {% if cover_tab == 'downloads' %}
+        <span>⬇️ {{ r.download_count }}</span>
+        {% else %}
+        <span>🕐 {{ r.updated_at|reltime }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>

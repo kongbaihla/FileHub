@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block page %}search{% endblock %}
+{% block title %}搜索：{{ q }}{% endblock %}
+{% block content %}
+<section class="search-hero">
+  <div class="search-hero-inner">
+    <h1 class="repo-title split-hero-sm">搜索</h1>
+    <p class="repo-sub">按仓库名称与描述查找</p>
+    <form class="search-big" action="/search" method="get" role="search">
+      {# No autofocus. It focused the field on load, which lit the border glow
+         immediately and pinned it to the centre (the pointer position had not
+         been recorded yet), and it scrolled the viewport down to the field so
+         the repository shelf was pushed out of sight. `data-autofocus-on-query`
+         is what the script uses to focus only when a query was actually
+         submitted, where focusing is wanted. #}
+      <input type="search" name="q" value="{{ q }}" placeholder="输入关键词开始搜索…" aria-label="搜索"
+             {% if q %}data-autofocus-on-query="1"{% endif %}>
+      <button type="submit" class="btn btn-green">搜索</button>
+    </form>
+  </div>
+</section>
+<section class="repos">
+  <div class="repos-inner">
+    {% if discover_tabs %}
+    {# Empty query: one shelf of repositories behind three tabs, then a random
+       sample of members. Tabs rather than three stacked grids — the same eight
+       repositories kept appearing in more than one shelf when they were all on
+       screen at once, which made the page look repetitive and long. #}
+    <div class="discover-tabs" role="tablist" aria-label="仓库分类">
+      {% for key, label, _ in discover_tabs %}
+      <button type="button" role="tab"
+              aria-selected="{{ 'true' if key == discover_tab else 'false' }}"
+              class="discover-tab {% if key == discover_tab %}active{% endif %}"
+              data-discover-tab="{{ key }}">{{ label }}</button>
+      {% endfor %}
+    </div>
+    {% if discover %}
+    {# The partial iterates `repos`; on this page the shelf arrives as
+       `discover`, so bind it before including rather than asking the partial to
+       know both names. cover_tab drives the meta line the partial prints. #}
+    {% set repos = discover %}
+    {% set cover_tab = discover_tab %}
+    <div class="discover-shelf" id="discover-shelf" data-tab="{{ discover_tab }}">
+      {% include "_repo_cards.html" %}
+    </div>
+    {% endif %}
+
+    {% if people %}
+    <div class="result-head-row">
+      <h2 class="result-head split-why">用户</h2>
+      <a class="btn btn-outline btn-sm" href="/people">全部用户 →</a>
+    </div>
+    <div class="user-grid">
+      {% for u in people %}
+      <a class="user-card js-card" href="/u/{{ u.username }}">
+        {% if u.avatar %}
+        <img class="avatar-img" src="{{ avatar_url(u.avatar) }}" alt="">
+        {% else %}
+        <span class="avatar">{{ u.username[:1]|upper }}</span>
+        {% endif %}
+        <span class="user-card-name">{{ u.username }}</span>
+        {% if u.username == site_owner %}<span class="owner-tag">站长</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if users %}
+    <h2 class="result-head split-why">用户</h2>
+    <div class="user-grid">
+      {% for u in users %}
+      <a class="user-card js-card" href="/u/{{ u.username }}">
+        {% if u.avatar %}
+        <img class="avatar-img" src="{{ avatar_url(u.avatar) }}" alt="">
+        {% else %}
+        <span class="avatar">{{ u.username[:1]|upper }}</span>
+        {% endif %}
+        <span class="user-card-name">{{ u.username }}</span>
+        {% if u.username == site_owner %}<span class="owner-tag">站长</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if repos %}
+    <h2 class="result-head split-why">仓库</h2>
+    <div class="repo-grid">
+      {% for r in repos %}
+      <a class="repo-card js-card" href="/r/{{ r.username }}/{{ r.name }}">
+        <div class="repo-cover-square" style="{{ cover_css(r.cover) }}"></div>
+        <div class="repo-card-body">
+          <div class="repo-card-head">
+            <h3>{{ r.name }}</h3>
+            <span class="repo-star">★ {{ r.star_count }}</span>
+          </div>
+          <p class="repo-desc">{{ r.description or "（暂无描述）" }}</p>
+          <div class="repo-meta"><span>📦 {{ r.file_count }} 文件</span><span>💾 {{ r.total_size|size }}</span><span>🕐 {{ r.updated_at|reltime }}</span></div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if q and not repos and not users %}
+    <div class="empty-state js-card"><p>没有找到与「{{ q }}」相关的内容。</p></div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

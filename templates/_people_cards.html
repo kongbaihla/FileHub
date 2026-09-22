@@ -1,0 +1,31 @@
+{# One grid of member cards, shared by the people page and the sort API.
+   Same reasoning as _repo_cards.html: the in-place sort fetches this exact
+   markup, so the card only exists in one place.
+
+   `show_bio` is off on /repos, where the strip is a short "who is here"
+   sampler rather than a directory — dropping the bio there makes each card a
+   single compact row and keeps the repository grid, which is the actual
+   content of that page, above the fold. `/people` keeps it, because choosing
+   a person to look at is exactly what the bio is for. #}
+<div class="people-grid {{ grid_class|default('people-grid-6') }}{% if not show_bio %} people-grid-tight{% endif %}">
+  {% for u in people %}
+  <a class="person-card js-card" href="/u/{{ u.username }}">
+    {% if u.avatar %}
+    <img class="avatar-img person-avatar" src="{{ avatar_url(u.avatar) }}" alt="">
+    {% else %}
+    <span class="avatar person-avatar">{{ u.username[:1]|upper }}</span>
+    {% endif %}
+    <div class="person-body">
+      <div class="person-head">
+        <h3>{{ u.username }}</h3>
+        {% if u.username == site_owner %}<span class="owner-tag">站长</span>{% endif %}
+      </div>
+      {% if show_bio %}<p class="person-bio">{{ u.bio or "这位用户还没有写简介" }}</p>{% endif %}
+      <div class="person-meta">
+        <span>📦 {{ u.repo_count }} 仓库</span>
+        <span>👥 {{ u.follower_count }} 粉丝</span>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>

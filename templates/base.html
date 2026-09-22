@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}FileHub{% endblock %} · FileHub</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+{# Theme, resolved before the stylesheet is applied. Inline and in <head> on
+   purpose: app.js loads at the end of the body, so waiting for it would paint
+   the dark palette first and flash on every navigation for a light-theme user.
+   The stored choice is read directly here; applyTheme() in app.js owns the rest
+   (the media listener, the theme-color meta). #}
+<script>
+(function () {
+  try {
+    var c = localStorage.getItem("fh-set-theme") || "system";
+    var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", c === "system" ? (dark ? "dark" : "light") : c);
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_v }}">
+<noscript><style>.split-hero,.split-hero-sm,.split-why{visibility:visible !important}.why-text .word{opacity:1 !important}.hero-sub,.hero-cta{visibility:visible !important}#intro{display:none}</style></noscript>
+</head>
+<body data-page="{% block page %}{% endblock %}"{% if user %} data-me="{{ user.username }}"{% endif %}{% if profile_user %} data-profile-user="{{ profile_user.username }}"{% endif %}{% if repo %} data-repo-owner="{{ owner }}" data-repo-name="{{ repo.name }}"{% endif %}>
+
+<!-- fixed elements live OUTSIDE the smooth wrapper (ScrollSmoother requirement) -->
+<div id="intro" aria-hidden="true"><div class="intro-brand">FILE<span>HUB</span></div></div>
+<div id="scroll-progress" aria-hidden="true"></div>
+<div id="toasts" aria-live="polite"></div>
+
+<header id="site-header">
+  <div class="header-inner">
+    <a href="/" class="brand" id="brand" aria-label="FileHub 首页">FILE<span>HUB</span></a>
+    <nav class="main-nav" aria-label="主导航">
+      <a href="/" class="nav-link {% if active_nav == 'home' %}active{% endif %}">首页</a>
+      <a href="/repos" class="nav-link {% if active_nav == 'repos' %}active{% endif %}">仓库</a>
+      <a href="/community" class="nav-link {% if active_nav == 'community' %}active{% endif %}">社区</a>
+      {% if user %}
+      <a href="/u/{{ user.username }}" class="nav-link {% if active_nav == 'me' %}active{% endif %}">我的</a>
+      {% endif %}
+    </nav>
+    <form class="header-search" action="/search" method="get" role="search" id="header-search">
+      <input type="search" name="q" value="{{ q }}" placeholder="搜索仓库、文件、用户…" aria-label="搜索" id="header-search-input" autocomplete="off">
+      <div class="search-suggest" id="search-suggest" hidden></div>
+      <button type="submit" aria-label="搜索">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+    </form>
+    <div class="header-actions">
+      {% if user %}
+      <a href="/u/{{ user.username }}" class="level-badge"
+         data-level="{{ user.level }}"
+         title="Lv{{ user.level }} · 已创建 {{ user.repo_count }} 个仓库{% if user.next_at %} · 再创建 {{ user.to_next }} 个升到 Lv{{ user.level + 1 }}{% else %} · 已达到最高等级{% endif %}">
+        <span class="level-tag">Lv{{ user.level }}</span>
+        <span class="level-bar"><span class="level-fill" style="width: {{ user.percent }}%"></span></span>
+      </a>
+      <a href="/u/{{ user.username }}" class="user-chip">
+        {% if user.avatar %}
+        <img class="avatar-img" src="{{ avatar_url(user.avatar) }}" alt="">
+        {% else %}
+        <span class="avatar">{{ user.username[:1]|upper }}</span>
+        {% endif %}
+        {{ user.username }}
+      </a>
+      <form action="/logout" method="post" class="inline-form" id="logout-form">
+        <button class="btn btn-ghost btn-sm" type="submit" id="logout-btn">退出</button>
+      </form>
+      {% else %}
+      <button type="button" class="user-chip user-chip-guest" id="guest-avatar" title="登录">
+        <span class="avatar">?</span>
+        <span class="guest-label">未登录</span>
+      </button>
+      {# In place, not a navigation: this used to be href="/register", which left
+         the current page for a shell that only exists to host the dialog. #}
+      <a href="#" class="btn btn-green btn-sm" data-dialog-open="register">注册</a>
+      {% endif %}
+      <button id="settings-toggle" class="motion-toggle" type="button" title="设置" aria-pressed="false">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div id="smooth-wrapper">
+  <div id="smooth-content">
+    <main>{% block content %}{% endblock %}</main>
+    <footer id="site-footer">
+      <div class="footer-inner">
+        <div class="footer-brand">FILE<span>HUB</span><p>托管你的每一份自定义文件。</p></div>
+        <div class="footer-cols">
+          <div><h4>站点</h4><a href="/">首页</a><a href="/search">搜索</a><a href="#" data-dialog-open="newrepo">新建仓库</a></div>
+          <div><h4>账号</h4><a href="#" data-dialog-open="login">登录</a><a href="#" data-dialog-open="register">注册</a></div>
+          <div><h4>技术</h4><a href="https://gsap.com" target="_blank" rel="noopener">GSAP 动效</a><a href="https://fastapi.tiangolo.com" target="_blank" rel="noopener">FastAPI</a></div>
+        </div>
+      </div>
+      <div class="footer-bottom">© 2026 FileHub · 动效由 GSAP 驱动</div>
+    </footer>
+  </div>
+</div>
+
+<script src="/static/vendor/gsap/gsap.min.js"></script>
+<script src="/static/vendor/gsap/ScrollTrigger.min.js"></script>
+<script src="/static/vendor/gsap/ScrollToPlugin.min.js"></script>
+<script src="/static/vendor/gsap/ScrollSmoother.min.js"></script>
+<script src="/static/vendor/gsap/SplitText.min.js"></script>
+<script src="/static/vendor/gsap/Flip.min.js"></script>
+<script src="/static/vendor/gsap/ScrambleTextPlugin.min.js"></script>
+{% block overlay %}{% endblock %}
+
+<!-- shared modals: available on every page -->
+<div id="confirm-modal" hidden>
+  <div class="preview-backdrop" data-confirm-close></div>
+  <div class="confirm-panel">
+    <h3 id="confirm-title">确认操作</h3>
+    <p id="confirm-text"></p>
+    <div class="confirm-actions">
+      <button class="btn btn-ghost" type="button" data-confirm-close>取消</button>
+      <button class="btn danger-btn" type="button" id="confirm-ok">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<div id="meta-modal" hidden>
+  <div class="preview-backdrop" data-meta-close></div>
+  <div class="confirm-panel">
+    <h3>标签与备注</h3>
+    <p class="meta-file" id="meta-file"></p>
+    <label class="field">标签（逗号分隔）
+      <input type="text" id="meta-tags" placeholder="设计, 素材, 2026">
+    </label>
+    <label class="field">备注
+      <textarea id="meta-note" rows="3" placeholder="给自己留个说明…"></textarea>
+    </label>
+    <div class="confirm-actions">
+      <button class="btn btn-ghost" type="button" data-meta-close>取消</button>
+      <button class="btn btn-green" type="button" id="meta-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- follower / following list, outside the smooth wrapper so it stays fixed -->
+<div id="follow-modal" hidden>
+  <div class="preview-backdrop" data-follow-close></div>
+  <div class="follow-panel">
+    <div class="follow-head">
+      <h3 id="follow-title">粉丝</h3>
+      <button class="icon-btn" type="button" data-follow-close aria-label="关闭">✕</button>
+    </div>
+    <div class="follow-body" id="follow-body"></div>
+  </div>
+</div>
+
+<!-- settings drawer: outside the smooth wrapper so it can be fixed -->
+<aside id="settings-panel" hidden aria-label="设置">
+  <div class="settings-backdrop" data-settings-close></div>
+  <div class="settings-drawer">
+    <div class="settings-head">
+      <h2>设置</h2>
+      <button class="icon-btn" type="button" data-settings-close aria-label="关闭">✕</button>
+    </div>
+
+    <div class="settings-group">
+      <h3>动效</h3>
+      <label class="setting-row">
+        <span>界面动效<small>页面入场、滚动揭示等动画</small></span>
+        <input type="checkbox" class="switch" data-setting="motion">
+      </label>
+      <label class="setting-row">
+        <span>鼠标跟随效果<small>首页背景随光标移动</small></span>
+        <input type="checkbox" class="switch" data-setting="pointer">
+      </label>
+      <label class="setting-row">
+        <span>平滑滚动<small>惯性滚动，关闭后更快</small></span>
+        <input type="checkbox" class="switch" data-setting="smooth">
+      </label>
+      <label class="setting-row">
+        <span>缩略图<small>文件列表显示图片预览</small></span>
+        <input type="checkbox" class="switch" data-setting="thumbs">
+      </label>
+      <label class="setting-row">
+        <span>标签栏展开动画<small>首页胶囊的入场动画</small></span>
+        <input type="checkbox" class="switch" data-setting="pillIntro">
+      </label>
+      <div class="setting-row setting-col">
+        <span>入场风格</span>
+        <select id="setting-pill-style" class="settings-select">
+          <option value="expand">从中心展开</option>
+          <option value="apple">Apple 式分段浮现</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>外观</h3>
+      {# Theme. A three-way choice rather than a switch: "follow the system" is a
+         third state, not the absence of a choice, and a checkbox cannot express
+         it — the same reason the OS settings this mirrors use a list. #}
+      <div class="setting-row setting-col">
+        <span>主题<small>深色、浅色，或跟随系统</small></span>
+        <div class="theme-picker" id="theme-picker" role="radiogroup" aria-label="主题">
+          <button type="button" class="theme-opt" data-theme-choice="system" role="radio" aria-checked="false">
+            <span class="theme-swatch theme-swatch-system" aria-hidden="true"></span>跟随系统
+          </button>
+          <button type="button" class="theme-opt" data-theme-choice="dark" role="radio" aria-checked="false">
+            <span class="theme-swatch theme-swatch-dark" aria-hidden="true"></span>深色
+          </button>
+          <button type="button" class="theme-opt" data-theme-choice="light" role="radio" aria-checked="false">
+            <span class="theme-swatch theme-swatch-light" aria-hidden="true"></span>浅色
+          </button>
+        </div>
+      </div>
+      <div class="setting-row setting-col">
+        <span>强调色</span>
+        <div class="accent-picker" id="accent-picker">
+          <button type="button" class="accent-dot" data-accent="#0ae448" style="--c:#0ae448" aria-label="绿色"></button>
+          <button type="button" class="accent-dot" data-accent="#3b9dff" style="--c:#3b9dff" aria-label="蓝色"></button>
+          <button type="button" class="accent-dot" data-accent="#ff7bd5" style="--c:#ff7bd5" aria-label="粉色"></button>
+          <button type="button" class="accent-dot" data-accent="#ffb020" style="--c:#ffb020" aria-label="橙色"></button>
+          <button type="button" class="accent-dot" data-accent="#a78bfa" style="--c:#a78bfa" aria-label="紫色"></button>
+        </div>
+      </div>
+      <label class="setting-row">
+        <span>更紧凑的列表<small>缩小文件行间距</small></span>
+        <input type="checkbox" class="switch" data-setting="compact">
+      </label>
+    </div>
+
+    <div class="settings-group">
+      <h3>聊天室背景</h3>
+      <p class="settings-hint">给社区聊天室加一张背景图，调整会立即生效</p>
+      <form class="banner-upload" method="post" action="/settings/chat-bg/upload" enctype="multipart/form-data">
+        <input type="file" name="chat_bg" id="chat-bg-file" accept="image/*" hidden>
+        <button type="button" class="btn btn-green btn-sm" id="chat-bg-pick">📁 上传背景图片</button>
+        <span class="banner-hint">支持 JPG / PNG，不超过 12 MB</span>
+      </form>
+      <div class="banner-row" id="chat-bg-rows" hidden><span>大小</span>
+        <input type="range" data-chatbg="scale" min="50" max="300" step="5">
+        <span class="banner-val" data-chatbg-val="scale">100%</span>
+      </div>
+      <div class="banner-row" id="chat-bg-rows2" hidden><span>水平</span>
+        <input type="range" data-chatbg="x" min="0" max="100" step="1">
+        <span class="banner-val" data-chatbg-val="x">50%</span>
+      </div>
+      <div class="banner-row" id="chat-bg-rows3" hidden><span>垂直</span>
+        <input type="range" data-chatbg="y" min="0" max="100" step="1">
+        <span class="banner-val" data-chatbg-val="y">50%</span>
+      </div>
+      <div class="banner-row" id="chat-bg-rows4" hidden><span>不透明度</span>
+        <input type="range" data-chatbg="opacity" min="0" max="100" step="5">
+        <span class="banner-val" data-chatbg-val="opacity">30%</span>
+      </div>
+      <div class="banner-row" id="chat-bg-rows5" hidden><span>模糊</span>
+        <input type="range" data-chatbg="blur" min="0" max="40" step="1">
+        <span class="banner-val" data-chatbg-val="blur">0px</span>
+      </div>
+      <div class="bio-editor-actions" id="chat-bg-actions" hidden>
+        <form method="post" action="/settings/chat-bg/remove" class="inline-form">
+          <button type="submit" class="btn btn-ghost btn-sm danger-btn">移除背景</button>
+        </form>
+        <button type="button" class="btn btn-green btn-sm" id="chat-bg-save">保存效果</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>界面大小</h3>
+      <label class="setting-row setting-col">
+        <span>整体缩放 <small id="zoom-label">100%</small></span>
+        <input type="range" id="setting-zoom" min="60" max="100" step="5" value="80" class="zoom-slider">
+      </label>
+      <label class="setting-row setting-col">
+        <span>聊天室宽度 <small id="chat-width-label">80%</small></span>
+        <input type="range" id="setting-chat-width" min="50" max="80" step="1" value="80" class="zoom-slider">
+      </label>
+    </div>
+
+    <div class="settings-foot">
+      <button class="btn btn-ghost btn-sm" type="button" id="settings-reset">恢复默认</button>
+    </div>
+  </div>
+</aside>
+<script src="/static/js/app.js?v={{ asset_v }}"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+# What the image does not need.
+#
+# The database and uploads are NOT excluded. The Dockerfile seeds /app/data
+# from them at build time, so the first `docker compose up` on a fresh volume
+# comes up with the site as it looks now rather than empty. Once the named
+# volume exists it takes over and the image's copies stop being consulted.
+#
+# The backup IS excluded: it holds every account and the test password that was
+# in use locally, and an image is the wrong place for either.
+filehub.db.backup-*
+*.backup-*
+
+# Development leftovers.
+__pycache__/
+*.py[cod]
+*.log
+server.log
+tmp_*
+_probe*
+.venv/
+venv/
+env/
+
+# VCS and editor cruft.
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Docs are for the repository, not the running image.
+开发总结.md
+DEPLOY.md
+README.md

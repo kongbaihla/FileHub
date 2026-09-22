@@ -1,0 +1,43 @@
+# FileHub — deployment compose file.
+#
+# Brings the app up with its state on a named volume, so redeploying the image
+# does not touch the database or the uploaded files.
+#
+#   docker compose up -d --build
+#
+# The volume holds filehub.db and uploads/ together; that pairing matters,
+# because every row in `files` points at a file in uploads/ and the two have to
+# be restored as a set.
+services:
+  filehub:
+    build: .
+    image: filehub:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Not read by the app, but PORT lets a host override the listen port.
+      PORT: "8000"
+      # Set to 1 when something in front terminates TLS and forwards to this
+      # container — Cloudflare, nginx, a load balancer. It makes the app trust
+      # the forwarding headers (so request.base_url reports https, which is what
+      # the RSS feed writes into every link) and mark the session cookie Secure.
+      #
+      # Leave it unset when the container is reached directly: a Secure cookie is
+      # not stored over http, so with this on and no TLS in front, login would
+      # appear to succeed and then immediately forget you.
+      FILEHUB_BEHIND_PROXY: "${FILEHUB_BEHIND_PROXY:-0}"
+    volumes:
+      - filehub-data:/app/data
+    healthcheck:
+      # The home page renders from the database, so a 200 here means the app
+      # found its state and can serve it — not merely that the process is up.
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  filehub-data:

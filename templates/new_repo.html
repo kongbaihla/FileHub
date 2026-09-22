@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block page %}form{% endblock %}
+{% block title %}新建仓库{% endblock %}
+{% block content %}
+{# This route survives as a direct entry point and as the target of the form's
+   POST. The dialog itself is built by initDialogTriggers() from the DIALOGS
+   table in app.js, so the markup lives in exactly one place; this page only
+   says which dialog to open and carries any server-side error into it.
+   `data-dialog-reopen` is read on boot, which covers the validation-failure
+   case where the server re-renders this page with an error. #}
+<main data-dialog-reopen="newrepo"
+      {% if error %}data-dialog-error="{{ error }}"{% endif %}></main>
+{% endblock %}

@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block page %}profile{% endblock %}
+{% block title %}{{ profile_user.username }}{% endblock %}
+{% block content %}
+{% if banner %}
+<script>window.__fhBanner = {{ banner|tojson }};</script>
+{% endif %}
+<section class="repo-hero" id="profile-custom">
+  {% if banner and banner.image %}
+  <div class="profile-banner" id="profile-banner-el">
+    <div class="profile-banner-inner" style="background-image: url('{{ banner_image_url(banner) }}')"></div>
+  </div>
+  {% endif %}
+  <div class="repo-hero-inner profile-head">
+    <div class="profile-avatar-wrap">
+      {% if profile_user.avatar %}
+      <img class="avatar-img avatar-xl" id="avatar-preview" src="{{ avatar_url(profile_user.avatar) }}" alt="">
+      {% else %}
+      <span class="avatar avatar-xl" id="avatar-preview">{{ profile_user.username[:1]|upper }}</span>
+      {% endif %}
+
+    </div>
+    <div class="profile-info">
+      {# The badge must sit outside the h1: SplitText rewrites that element into
+         per-character spans, so anything placed inside is taken apart and
+         animated letter by letter. #}
+      <div class="profile-title-row">
+        <h1 class="repo-title split-hero-sm">{{ profile_user.username }}</h1>
+        {% if profile_user.username == site_owner %}<span class="owner-tag owner-tag-sm">站长</span>{% endif %}
+      </div>
+      <p class="repo-sub">注册于 {{ profile_user.created_at|reltime }}</p>
+
+      <div class="repo-actions">
+        {% if is_self %}
+        <a href="#" class="btn btn-green btn-sm magnetic" data-dialog-open="newrepo">＋ 新建仓库</a>
+        <button type="button" class="btn btn-outline btn-sm" id="avatar-manage">◯ 更换头像</button>
+        {% elif user %}
+        <button type="button" class="btn btn-sm {% if is_following %}btn-outline{% else %}btn-green{% endif %} magnetic"
+                id="follow-btn" data-username="{{ profile_user.username }}"
+                data-following="{{ '1' if is_following else '0' }}">
+          <span class="follow-icon">{% if is_following %}✓ 已关注{% else %}＋ 关注{% endif %}</span>
+          <span class="follow-count">{{ follower_count }}</span>
+        </button>
+        {% else %}
+        <a href="#" class="btn btn-green btn-sm" data-dialog-open="login">＋ 关注</a>
+        {% endif %}
+      </div>
+
+      <div class="profile-stats">
+        <div class="stat js-reveal"><span class="stat-num">{{ repos|length }}</span><span class="stat-label">仓库</span></div>
+        <div class="stat js-reveal"><span class="stat-num">{{ total_files }}</span><span class="stat-label">文件</span></div>
+        <div class="stat js-reveal"><span class="stat-num">{{ total_size|size }}</span><span class="stat-label">占用</span></div>
+        <div class="stat js-reveal"><span class="stat-num">{{ total_downloads }}</span><span class="stat-label">下载</span></div>
+        <button type="button" class="stat stat-btn js-reveal" data-follow-tab="followers">
+          <span class="stat-num" id="follower-count">{{ follower_count }}</span><span class="stat-label">粉丝</span>
+        </button>
+        <button type="button" class="stat stat-btn js-reveal" data-follow-tab="following">
+          <span class="stat-num" id="following-count">{{ following_count }}</span><span class="stat-label">正在关注</span>
+        </button>
+        {% if is_self %}
+        <button type="button" class="btn btn-green btn-sm banner-btn magnetic" id="banner-edit" data-magnet-reach="150" data-magnet-centre="1">自定义背景</button>
+        {% endif %}
+      </div>
+
+
+
+    </div>
+  </div>
+
+  {# The customisation panel lives OUTSIDE .repo-hero on purpose. The background
+     image is `position: absolute; inset: 0` against the hero, so anything that
+     changes the hero's height resizes it — opening this panel used to stretch
+     the background, which read as the image "moving" when the button was
+     clicked. Below the section, the panel grows on its own. #}
+</section>
+
+  {% if is_self %}
+  <div class="repo-hero-inner">
+    <div class="side-card" id="banner-panel" hidden style="max-width:620px;margin-top:20px">
+      <h3 class="side-title">自定义背景</h3>
+      <div class="banner-controls">
+        <form class="banner-upload" method="post" action="/settings/banner/upload" enctype="multipart/form-data">
+          <input type="file" name="banner" id="banner-file" accept="image/*" hidden>
+          <button type="button" class="btn btn-green btn-sm" id="banner-pick">上传背景图片</button>
+          <span class="banner-hint">支持 JPG / PNG，建议横向图片，不超过 12 MB</span>
+        </form>
+        {% if banner and banner.image %}
+        <div class="banner-row"><span>缩放</span>
+          <input type="range" data-banner="scale" min="50" max="300" step="5">
+          <span class="banner-val" data-banner-val="scale">100%</span>
+        </div>
+        <div class="banner-row"><span>水平位置</span>
+          <input type="range" data-banner="x" min="0" max="100" step="1">
+          <span class="banner-val" data-banner-val="x">50%</span>
+        </div>
+        <div class="banner-row"><span>垂直位置</span>
+          <input type="range" data-banner="y" min="0" max="100" step="1">
+          <span class="banner-val" data-banner-val="y">50%</span>
+        </div>
+        <div class="banner-row"><span>不透明度</span>
+          <input type="range" data-banner="opacity" min="0" max="100" step="5">
+          <span class="banner-val" data-banner-val="opacity">70%</span>
+        </div>
+        <div class="banner-row"><span>模糊程度</span>
+          <input type="range" data-banner="blur" min="0" max="40" step="1">
+          <span class="banner-val" data-banner-val="blur">0px</span>
+        </div>
+        <div class="bio-editor-actions">
+          <form method="post" action="/settings/banner/remove" class="inline-form">
+            <button type="submit" class="btn btn-ghost btn-sm danger-btn">移除背景</button>
+          </form>
+          <button type="button" class="btn btn-green btn-sm" id="banner-save">保存效果</button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+{% if msg %}<div class="flash-msg">{{ msg }}</div>{% endif %}
+
+<section class="repos" id="profile-sections">
+  <div class="repos-inner">
+    <h2 class="result-head split-why">等级</h2>
+    <div class="level-panel js-card">
+      <div class="level-panel-head">
+        <span class="level-big" data-level="{{ level.level }}">Lv{{ level.level }}</span>
+        <div class="level-panel-info">
+          <span class="level-panel-title">
+            {% if level.level >= level.max %}已达到最高等级 🏆{% else %}距离 Lv{{ level.level + 1 }} 还需创建 {{ level.to_next }} 个仓库{% endif %}
+          </span>
+          <span class="level-panel-sub">已创建 {{ level.current }} 个仓库 · 等级由仓库数量决定</span>
+        </div>
+      </div>
+      <div class="level-track">
+        <span class="level-progress" style="width: {{ level.percent }}%"></span>
+      </div>
+      <div class="level-scale">
+        {% for t in level_table %}
+        <span class="level-step {% if loop.index <= level.level %}reached{% endif %}" title="Lv{{ loop.index }}：{{ t }} 个仓库">
+          <span class="level-step-dot"></span>
+          <span class="level-step-label">Lv{{ loop.index }}</span>
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="activity-cols">
+      <div class="activity-left">
+        <h2 class="result-head split-why">上传活动</h2>
+        <div class="heatmap-wrap js-card">
+          <div class="hm-months" aria-hidden="true" id="hm-months">
+            {% for t in month_ticks %}
+            <span class="hm-month-tick" style="--hm-col: {{ t.index }}">{{ t.label }}</span>
+            {% endfor %}
+          </div>
+          <div class="heatmap" id="heatmap" data-max="{{ max_day }}">
+            {% for week in weeks %}
+            <div class="hm-week">
+              {% for d in week %}
+              {# No title attribute: the site draws its own tooltip (see
+                 initHeatmap), and a native one would appear alongside it in
+                 the browser's own style. #}
+              <div class="hm-day" data-date="{{ d.date }}" data-count="{{ d.count }}"></div>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          <div class="hm-legend">
+            <span>少</span>
+            <span class="hm-day lv0"></span><span class="hm-day lv1"></span>
+            <span class="hm-day lv2"></span><span class="hm-day lv3"></span><span class="hm-day lv4"></span>
+            <span>多</span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="activity-right">
+        <h2 class="result-head split-why">简介</h2>
+        <div class="side-card js-card">
+          <div class="bio-line">
+            <p class="profile-bio" id="bio-text" {% if not profile_user.bio %}hidden{% endif %}>{{ profile_user.bio or "" }}</p>
+            {% if is_self %}
+            <button type="button" class="bio-edit-btn" id="bio-edit">{{ "编辑简介" if profile_user.bio else "添加简介" }}</button>
+            {% endif %}
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <h2 class="result-head split-why">{{ "我的仓库" if is_self else "TA 的仓库" }}</h2>
+    {% if repos %}
+    <div class="repo-grid">
+      {% for r in repos %}
+      <a class="repo-card js-card" href="/r/{{ profile_user.username }}/{{ r.name }}">
+        <div class="repo-cover-square" style="{{ cover_css(r.cover) }}"></div>
+        <div class="repo-card-body">
+          <div class="repo-card-head">
+            <h3>{{ r.name }}</h3>
+            <span class="repo-star">★ {{ r.star_count }}</span>
+          </div>
+          <p class="repo-desc">{{ r.description or "（暂无描述）" }}</p>
+          <div class="repo-meta"><span>📦 {{ r.file_count }} 文件</span><span>💾 {{ r.total_size|size }}</span><span>🕐 {{ r.updated_at|reltime }}</span></div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state js-card"><p>这个用户还没有创建仓库。</p></div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

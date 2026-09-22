@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block page %}form{% endblock %}
+{% block title %}编辑 README · {{ repo.name }}{% endblock %}
+{% block content %}
+{# Painted as a dialog over the page it came from, matching the login and
+   register surfaces: same card, same entrance, same backdrop. It stays a real
+   route rather than a runtime-built dialog because the editor carries content
+   the server already has (the current README) and posts to its own route, so
+   rendering the shell is simpler than assembling it in JavaScript. #}
+<section class="modal-page" id="readme-editor-page">
+  <div class="preview-backdrop" data-editor-close></div>
+  <form class="auth-card modal-card readme-modal-card" method="post"
+        action="/r/{{ owner }}/{{ repo.name }}/readme/edit">
+    <h1 class="auth-title">编辑 README</h1>
+    <p class="auth-sub">
+      {{ owner }} / {{ repo.name }} ·
+      支持 Markdown：<code># 标题</code>、<code>**加粗**</code>、<code>- 列表</code>、<code>```代码块```</code>、<code>[链接](url)</code>
+      {% if not exists %}<br><strong>保存后将自动创建 README.md</strong>{% endif %}
+    </p>
+    {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+    <textarea id="readme-content" name="content" rows="20" spellcheck="false"
+      placeholder="# 我的仓库&#10;&#10;介绍一下这里放了什么…">{{ content }}</textarea>
+    <div class="editor-foot">
+      <span class="editor-count" id="editor-count">0 字符</span>
+      <div class="editor-actions">
+        <a href="/r/{{ owner }}/{{ repo.name }}" class="btn btn-ghost">取消</a>
+        <button type="submit" class="btn btn-green">保存 README</button>
+      </div>
+    </div>
+    <button type="button" class="dialog-x" data-editor-close aria-label="关闭">&#10005;</button>
+  </form>
+</section>
+{% endblock %}

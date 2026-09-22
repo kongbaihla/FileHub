@@ -1,0 +1,2790 @@
+/* FileHub — dark theme inspired by gsap.com */
+:root {
+  --bg: #0e100f;
+  --bg-2: #151716;
+  --panel: #1a1d1b;
+  --border: #2a2e2b;
+  --text: #f4f6f4;
+  --muted: #a8b0a9;
+  --green: #0ae448;
+  --accent: #0ae448;
+  --green-dark: #08b639;
+  --radius: 14px;
+  --header-h: 64px;
+  --font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  /* ---- surfaces that are not part of the four-colour core ----
+     These were hardcoded hex values scattered through the sheet. They are
+     variables now because the light theme has to move them together with the
+     core palette: a single missed literal is a dark patch in a light page, and
+     with ~100 of them scattered by hand that is impossible to keep on top of. */
+  --ink-soft: #6b736c;      /* dimmest text: hints, placeholders */
+  --ink-faint: #565e57;     /* separators, breadcrumb slashes */
+  --shade: #262b28;         /* level bar track, inert fills */
+  --well: #0a0c0b;          /* recessed areas: code blocks, inputs */
+  --on-accent: #04140a;     /* text on an accent-coloured fill */
+  --pick-veil: rgba(14, 16, 15, .72);
+  --shadow-card: 0 12px 34px rgba(0, 0, 0, .4);
+  --shadow-pop: 0 16px 40px rgba(0, 0, 0, .55);
+  --hero-ink: #f4f6f4;
+
+  /* ---- the remaining surface ramp ----
+     Row hovers, inset wells and hairline dividers that were also literals.
+     Grouped by role rather than by value so the light theme only has to
+     restate each role once, however many components use it. */
+  --row-hover: #1e211f;     /* a list row under the pointer */
+  --row-hover-2: #202422;   /* the same, one step up: menus, suggestions */
+  --inset: #161917;         /* the deepest recess: heatmap cells, code wells */
+  --divider: #232624;       /* hairlines inside a panel */
+  --body-ink: #cdd4ce;      /* long-form text: markdown, feed bodies */
+  --meta-ink: #79817a;      /* secondary metadata: sizes, dates */
+  /* The floating header's glass: tinted, blurred, and darker once scrolled. */
+  --header-glass: rgba(14, 16, 15, .6);
+  --header-glass-solid: rgba(16, 18, 17, .88);
+  --header-shadow: rgba(0, 0, 0, .5);
+
+  /* ---- glow palette ----
+     Halos and tinted washes are derived from the accent but heavily
+     desaturated, so a purple accent produces a near-neutral violet bloom
+     rather than a purple lamp. The accent itself still colours text, icons and
+     fills — only the light it casts is muted, which keeps the two readable
+     against each other instead of shouting the same hue twice.
+
+     color-mix() does the desaturation: mixing the accent 30% into the muted
+     grey leaves a tinted grey, not a tinted accent. The fallbacks are the
+     default green at matching strength, for browsers without color-mix(). */
+  --glow: color-mix(in srgb, var(--accent, #0ae448) 30%, var(--muted));
+  --glow-strong: color-mix(in srgb, var(--accent, #0ae448) 45%, var(--muted));
+  --glow-weak: color-mix(in srgb, var(--accent, #0ae448) 18%, var(--muted));
+}
+
+/* ---- light theme ----
+   Set on <html> by the settings panel. Only the palette is redefined here:
+   every component already reads these variables, so nothing else has to know
+   which theme is active. The accent is deliberately NOT overridden — it is the
+   user's choice and has to survive a theme switch.
+   The light surface ramp is inverted in direction (the page is the lightest
+   layer and panels sit slightly darker) because depth reads the opposite way
+   on a light background. */
+:root[data-theme="light"] {
+  --bg: #f6f7f6;
+  --bg-2: #eceeec;
+  --panel: #ffffff;
+  --border: #d8dcd8;
+  --text: #14171a;
+  --muted: #5c655e;
+  --green-dark: #067a26;
+
+  --ink-soft: #79817a;
+  --ink-faint: #9aa29b;
+  --shade: #dfe3df;
+  --well: #f0f2f0;
+  --on-accent: #ffffff;
+  --pick-veil: rgba(255, 255, 255, .72);
+  --shadow-card: 0 10px 26px rgba(20, 30, 24, .12);
+  --shadow-pop: 0 14px 34px rgba(20, 30, 24, .18);
+  --hero-ink: #14171a;
+
+  --row-hover: #f1f3f1;
+  --row-hover-2: #eef1ee;
+  --inset: #f0f2f0;
+  --divider: #e4e8e4;
+  --body-ink: #2b312d;
+  --meta-ink: #6a736c;
+  --header-glass: rgba(255, 255, 255, .72);
+  --header-glass-solid: rgba(255, 255, 255, .9);
+  --header-shadow: rgba(30, 40, 34, .16);
+}
+/* Bases for the alpha-composited variants below. Declared as separate custom
+   properties because color-mix() cannot be given an alpha in a way every
+   engine accepts, and these are read as rgb() triples. */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  :root { --glow: #6f8a75; --glow-strong: #8fa894; --glow-weak: #5d7364; }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: auto; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+a { color: var(--green); text-decoration: none; }
+a:hover { text-decoration: none; }
+::selection { background: var(--green); color: var(--on-accent); }
+
+/* ---------------- scrollbars ----------------
+   One treatment for every scroll container in the site, so none of them falls
+   back to the OS default. The thumb is near-invisible at rest and takes the
+   accent colour under the pointer: the bar is there when you look for it and
+   out of the way when you do not, which matters most in the chat card where
+   the message column sits against the frame edge.
+   Both the standard properties and the -webkit- pseudo-elements are declared:
+   Firefox only understands the former, Chrome/Safari only the latter. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(42, 46, 43, .55) transparent;
+}
+body.has-accent * {
+  scrollbar-color: color-mix(in srgb, var(--accent, #0ae448) 45%, transparent) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(42, 46, 43, .55);
+  border-radius: 99px;
+  /* A transparent border plus background-clip insets the thumb inside the
+     track, so it reads as a thin pill rather than filling the gutter. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color .2s;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent, var(--green));
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:active { background: var(--accent, var(--green)); background-clip: content-box; }
+
+/* FOUC guard: only the hero headline is hidden up-front (GSAP autoAlpha reveals
+   it after fonts load). Everything else stays visible by default so content is
+   never lost if a trigger fails to fire — scroll reveals animate from a
+   JS-applied state instead of a CSS-applied one. */
+.split-hero, .split-hero-sm, .split-why { visibility: hidden; }
+/* staged hero copy: hidden until its cue so it cannot flash before the
+   timeline hides it (GSAP takes over from here and clears the state). */
+body[data-page="home"] .hero-sub,
+body[data-page="home"] .hero-cta { visibility: hidden; }
+
+/* ---------------- intro overlay */
+#intro {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.intro-brand { font-size: 2rem; font-weight: 900; letter-spacing: .2em; }
+.intro-brand span { color: var(--green); }
+
+/* ---------------- scroll progress */
+#scroll-progress {
+  position: fixed; top: 0; left: 0; height: 3px; width: 100%;
+  background: linear-gradient(90deg, var(--green), #7dffd0);
+  transform: scaleX(0); transform-origin: 0 50%;
+  z-index: 90;
+}
+
+/* ---------------- header */
+/* Floating pill navigation: the bar is inset from the viewport edges and
+   rounded, so it reads as an overlay above the page rather than a full-width
+   band. --header-h stays the logical height for offset calculations. */
+#site-header {
+  position: fixed; top: 14px; left: 50%;
+  transform: translateX(-50%);
+  width: min(1180px, calc(100vw - 28px));
+  z-index: 80;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  /* Translucent so the page shows through the blur. Both the tint and the
+     shadow are variables: a dark glass panel on a light page is a grey slab,
+     and a 50%-black shadow under a white bar reads as a smudge. */
+  background: var(--header-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: background .3s, border-color .3s, box-shadow .3s, top .3s;
+}
+#site-header.scrolled {
+  top: 10px;
+  background: var(--header-glass-solid);
+  border-color: var(--border);
+  box-shadow: 0 10px 34px var(--header-shadow);
+}
+.header-inner {
+  padding: 0 12px 0 22px;
+  height: calc(var(--header-h) - 8px);
+  display: flex; align-items: center; gap: 22px;
+}
+/* The header floats, so page content starts below it rather than under it. */
+:root { --header-offset: calc(var(--header-h) + 14px); }
+.brand { font-weight: 900; font-size: 1.15rem; letter-spacing: .12em; color: var(--text); }
+.brand span { color: var(--green); }
+.main-nav { display: flex; gap: 18px; }
+.nav-link {
+  color: var(--muted); font-size: .92rem;
+  position: relative; padding: 2px 1px;
+  transition: color .2s, transform .22s cubic-bezier(.34,1.56,.64,1);
+}
+.nav-link:hover { color: var(--text); transform: translateY(-2px); }
+/* An underline that grows from the centre on hover. */
+.nav-link::after {
+  content: ""; position: absolute; left: 50%; right: 50%; bottom: -5px;
+  height: 2px; border-radius: 2px; background: var(--accent, var(--green));
+  transition: left .24s ease, right .24s ease;
+}
+.nav-link:hover::after { left: 0; right: 0; }
+.header-search {
+  margin-left: auto; display: flex; align-items: center; position: relative;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 6px 4px 14px; min-width: 200px;
+  transition: border-color .25s, background .25s, box-shadow .3s;
+}
+/* Hover and focus share one treatment: the field lights up before you click it,
+   which makes a control that is mostly decoration until used feel reachable. */
+.header-search:hover,
+.header-search:focus-within {
+  border-color: var(--accent, var(--green));
+  background: var(--bg-2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 22%, transparent),
+              0 0 18px color-mix(in srgb, var(--glow) 26%, transparent);
+}
+.header-search input {
+  background: none; border: 0; outline: 0; color: var(--text);
+  font-size: .85rem; width: 100%; font-family: var(--font);
+}
+.header-search input::placeholder { color: var(--ink-soft); }
+.header-search button {
+  background: var(--accent, var(--green)); border: 0; border-radius: 50%;
+  width: 26px; height: 26px; display: grid; place-items: center;
+  color: var(--on-accent); cursor: pointer; flex: none;
+}
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.inline-form { display: inline; }
+.user-chip {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text); font-size: .9rem; font-weight: 600;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 999px; padding: 4px 12px 4px 4px;
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1),
+              border-color .22s, box-shadow .22s, background .22s;
+}
+.user-chip:hover {
+  transform: scale(1.07);
+  border-color: var(--accent, var(--green));
+  background: var(--row-hover);
+  box-shadow: 0 6px 20px rgba(0,0,0,.45);
+}
+.user-chip:active { transform: scale(1.02); }
+.avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--green), #0a8f33);
+  color: var(--on-accent); font-weight: 800; font-size: .8rem;
+  display: inline-grid; place-items: center; flex: none;
+}
+.avatar-xl { width: 132px; height: 132px; font-size: 2.4rem; }
+.motion-toggle {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer;
+  display: grid; place-items: center;
+}
+.motion-toggle.off { color: var(--ink-faint); border-style: dashed; }
+
+/* ---------------- buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: 999px; padding: 10px 22px;
+  font-weight: 700; font-size: .95rem; font-family: var(--font);
+  cursor: pointer; border: 1px solid transparent; white-space: nowrap;
+  transition: background .2s, color .2s, border-color .2s, box-shadow .2s;
+}
+.btn-sm { padding: 6px 14px; font-size: .85rem; }
+.btn-lg { padding: 14px 30px; font-size: 1.05rem; }
+.btn-block { width: 100%; justify-content: center; }
+.btn-green { background: var(--green); color: var(--on-accent); }
+.btn-green:hover { background: var(--green-dark); box-shadow: 0 0 24px color-mix(in srgb, var(--glow) 35%, transparent); }
+.btn-outline { border-color: var(--border); color: var(--text); background: transparent; }
+/* The outline button takes the accent for both its border and its label, so it
+   tracks the colour picker alongside the filled button beside it. The border
+   uses a colour-mixed step rather than the raw accent: a full-strength outline
+   next to a full-strength fill reads as two competing buttons rather than a
+   primary and its secondary. */
+.btn-outline:hover {
+  border-color: var(--accent, var(--green));
+  color: var(--accent, var(--green));
+}
+.btn-outline:not(:hover) { color: var(--accent, var(--green)); border-color: color-mix(in srgb, var(--accent, var(--green)) 38%, var(--border)); }
+.btn-ghost { color: var(--muted); background: transparent; }
+.btn-ghost:hover { color: var(--text); }
+.icon-btn {
+  background: none; border: 0; color: var(--muted); cursor: pointer;
+  font-size: .95rem; padding: 4px; border-radius: 6px;
+}
+.icon-btn:hover { color: #ff7b72; }
+
+/* ---------------- hero */
+/* The hero fills the first screen and stacks its content above the label
+   pill. Both blocks are pushed toward the bottom half so the composition
+   reads as a single cluster rather than content pinned to the top. */
+/* The hero fills the first screen and holds one centred cluster: the copy
+   block, a fixed gap, then the label pill. Both blocks are centred as a unit
+   so neither hugs an edge. */
+.hero {
+  position: relative; min-height: 100vh;
+  display: flex; flex-direction: column;
+  justify-content: center; overflow: hidden;
+  gap: 84px;
+}
+/* Centred both ways: the extra top padding is offset by a matching bottom so
+   the block sits on the optical centre rather than riding high. */
+.hero-inner {
+  max-width: 1200px; margin: 0 auto;
+  /* Top padding only needs to clear the floating header; the flex `gap`
+     handles the distance to the pill. */
+  padding: calc(var(--header-offset) + 10px) 24px 0;
+  position: relative; z-index: 2; width: 100%;
+}
+.hero-kicker {
+  color: var(--green); font-weight: 700; font-size: .95rem;
+  letter-spacing: .08em; margin-bottom: 18px;
+}
+.hero-title {
+  font-size: clamp(3rem, 8vw, 6.5rem); font-weight: 900; line-height: 1.06;
+  letter-spacing: -.02em;
+}
+.hero-sub { color: var(--muted); font-size: 1.15rem; margin: 26px 0 34px; max-width: 640px; }
+.hero-cta { display: flex; gap: 16px; flex-wrap: wrap; }
+.hero-stats { display: flex; gap: 48px; margin-top: 58px; flex-wrap: wrap; }
+.stat { display: flex; flex-direction: column; }
+.stat-num { font-size: 2.1rem; font-weight: 900; color: var(--green); font-variant-numeric: tabular-nums; }
+.stat-label { color: var(--muted); font-size: .85rem; letter-spacing: .06em; }
+/* The hero background is a matrix of extruded 3D tiles drawn on a canvas by
+   initHeroTiles() in app.js. Each tile is a real box — top face plus front
+   face — pushed through a pinhole camera, so the field converges toward a
+   vanishing point instead of reading as a flat texture, and tiles rise toward
+   the pointer.
+   Canvas rather than DOM: the field runs to ~500 tiles, and 500 nodes each
+   carrying its own transform costs a style recalculation every frame, while
+   one canvas costs a single composited layer.
+   The glows stay radial gradients rather than filter: blur() — a 90px blur on
+   a 480px element made the browser re-composite a large blurred layer every
+   frame, enough to drop frames while the window was being dragged. */
+/* Neutral rather than coloured: the tiles carry the accent when they lift, and
+   a coloured wash behind them fought it. The one tint left is the accent itself,
+   at an alpha low enough to read as the room the field sits in rather than as a
+   second colour. */
+.hero-bg {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 62% at 50% 8%, rgba(224, 227, 220, .05), transparent 70%),
+    radial-gradient(ellipse 62% 58% at 86% 96%,
+      color-mix(in srgb, var(--accent, #0ae448) 9%, transparent), transparent 72%);
+}
+.hero-tiles { display: block; width: 100%; height: 100%; }
+
+/* ---------------- marquee: floating pill with controls ----------------
+   Modelled on Apple's media-card gallery: a rounded capsule holding a
+   play/pause button, the scrolling labels, and a dot pager. */
+/* The pill floats on the page background rather than sitting in a bordered
+   band, so it does not read as glued to the section edges. */
+/* The band spans the full width of the page and fills one screen height, so
+   there is no dead space above or below the pill. */
+/* The pill now lives inside the hero, floating over its background rather
+   than sitting in a separate band. */
+.marquee {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%;
+  padding: 0 24px;
+  background: transparent; border: 0;
+}
+/* No padding reservation here: the entrance moves the pill with `top` on a
+   relative element, which is a paint-time offset and takes nothing out of the
+   flex flow, so the row does not need to make room for it. */
+/* While the Apple-style entrance is running, the hero must not clip. The pill
+   starts below the viewport and rises into place, but .hero is overflow:hidden
+   — so the travelling part was cut off at the hero's edge and the bar looked
+   like it was appearing in place. The class is added by playEntrance() and
+   removed when the timeline settles; at rest the clipping is restored, which
+   the hero needs for the glow gradients. */
+body.pill-entering .hero { overflow: visible; }
+
+.marquee-pill {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; gap: 10px;
+  width: min(1180px, 100%);
+  background: var(--bg-2); border: 1px solid var(--border);  border-radius: 999px; padding: 8px 12px 8px 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  transition: border-color .3s, box-shadow .3s, transform .3s;
+}
+.marquee-pill:hover {
+  border-color: var(--ink-faint);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .55);
+  transform: translateY(-2px);
+}
+/* The control expands sideways on hover, the way Apple's pill does when the
+   pointer enters it. */
+.marquee-play {
+  flex: none; width: 40px; height: 40px; border-radius: 999px;
+  display: grid; place-items: center; cursor: pointer;
+  background: var(--accent, var(--green)); color: var(--on-accent);
+  border: 0; overflow: hidden;
+  transition: width .38s cubic-bezier(.34, 1.3, .64, 1), filter .2s, box-shadow .3s;
+}
+.marquee-play:hover {
+  width: 52px; filter: brightness(1.06);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--glow) 20%, transparent);
+}
+.marquee-play svg { flex: none; }
+.marquee-play:active { transform: scale(0.96); }
+/* Only one of the two glyphs is shown, depending on state. */
+.marquee-play .icon-play { display: none; }
+.marquee.paused .marquee-play .icon-play { display: block; }
+.marquee.paused .marquee-play .icon-pause { display: none; }
+
+.marquee-viewport {
+  position: relative;
+  flex: 1 1 0; min-width: 0; overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+/* The track holds the repeated label sets side by side. Sets must share a
+   baseline, otherwise the cloned copies sit a line lower than the original
+   and the row looks doubled while it scrolls. */
+.marquee-track {
+  display: flex; align-items: center;
+  width: max-content; white-space: nowrap;
+}
+
+/* The highlight: one pill that chases whichever label is nearest the centre.
+   Positioned from JS so it slides between items as the row scrolls. */
+.marquee-set {
+  display: flex; align-items: center; gap: 34px; padding-right: 34px;
+  flex: none; white-space: nowrap; height: 26px;
+}
+.marquee-item {
+  position: relative; z-index: 2;
+  font-size: .92rem; font-weight: 600; color: var(--muted);
+  padding: 6px 2px; cursor: default; line-height: 1.2;
+  white-space: nowrap;            /* labels must never wrap to two lines */
+  flex: none;
+  transition: color .22s;
+}
+.marquee-item:hover { color: var(--text); }
+
+/* Dot pager with a sliding highlight, mirroring Apple's media-card control:
+   the pill behind the dots travels to whichever dot is active. */
+.marquee-dots {
+  position: relative; flex: none;
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 10px; border-radius: 999px;
+  background: var(--bg-2);
+}
+.marquee-dots-bg {
+  position: absolute; top: 6px; left: 10px;
+  height: calc(100% - 12px); border-radius: 99px;
+  background: var(--accent, var(--green));
+  opacity: .16;
+  pointer-events: none;
+  transition: transform .35s cubic-bezier(.34, 1.4, .64, 1), width .35s cubic-bezier(.34, 1.4, .64, 1);
+}
+.marquee-dot {
+  position: relative; z-index: 1;
+  width: 7px; height: 7px; padding: 0; border-radius: 50%;
+  border: 0; cursor: pointer; background: var(--ink-faint);
+  /* Apple's dotnav starts each dot small and fades it in after the bar opens. */
+  transform: scale(0.5); opacity: 0;
+  transition: background .3s, width .3s cubic-bezier(.34, 1.4, .64, 1),
+              border-radius .3s, transform .3s ease, opacity .3s ease;
+}
+.marquee-pill.entered .marquee-dot { transform: scale(1); opacity: 1; }
+.marquee-dot:hover { background: #6f7a72; transform: scale(1.25); }
+.marquee-dot.current {
+  width: 22px; border-radius: 99px;
+  background: var(--accent, var(--green));
+}
+@media (max-width: 700px) {
+  .marquee-dots { display: none; }
+  .marquee-pill { padding: 6px 8px 6px 6px; }
+  .marquee-play { width: 34px; height: 34px; }
+}
+
+/* ---------------- why / sections */
+section { position: relative; }
+.why { padding: 90px 24px 140px; }
+.why-inner, .features-inner, .repos-inner, .file-area-inner { max-width: 1200px; margin: 0 auto; }
+.why-text {
+  font-size: clamp(1.5rem, 3.4vw, 2.6rem); font-weight: 800; line-height: 1.5;
+  max-width: 980px;
+}
+.why-text .word { opacity: .12; display: inline-block; }
+.why-text .word.hl { color: var(--green); }
+.section-title { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 900; margin-bottom: 40px; }
+
+/* ---------------- features */
+.features { padding: 40px 24px 110px; }
+/* Cards in a row cannot differ in height — the grid stretches them to the
+   tallest — so a card with a shorter line of copy just ends up with more dead
+   space under its text. Sizing the row off its content and pinning a modest
+   min-height keeps every card the same shape without leaving the short ones
+   looking half empty. align-items:start was the wrong lever: it shrank the
+   cards to their text and made the row ragged, which is worse than the slack. */
+.feature-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 22px;
+}
+.feature-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 26px 24px 24px;
+  display: flex; flex-direction: column;
+  transition: border-color .25s, box-shadow .25s, transform .25s;
+}
+.feature-card:hover {
+  border-color: var(--green); transform: translateY(-6px);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--glow) 16%, transparent);
+}
+.feature-icon { font-size: 1.8rem; line-height: 1; margin-bottom: 12px; }
+.feature-card h3 { font-size: 1.12rem; margin-bottom: 7px; }
+/* The copy sits directly under the heading rather than being pushed around by
+   the leftover height, so all four cards read as one row at the same rhythm. */
+.feature-card p { color: var(--muted); font-size: .92rem; margin: 0; }
+
+/* ---------------- repo cards */
+.repos { padding: 40px 24px 110px; }
+.repos-head { display: flex; align-items: center; justify-content: space-between; }
+/* Four columns, fixed. `auto-fill` with a 300px minimum only ever fitted three
+   across the 1200px content column (300 × 4 + gaps > 1200), so the cards were
+   wider than the design wanted. Explicit 1fr columns divide the row evenly, and
+   the breakpoints drop to 3 / 2 / 1 before the cards get too narrow to read. */
+.repo-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+@media (max-width: 1080px) { .repo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 820px)  { .repo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px)  { .repo-grid { grid-template-columns: minmax(0, 1fr); } }
+.repo-card {
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px; color: var(--text);
+  transition: border-color .25s, transform .25s, box-shadow .25s;
+}
+.repo-card:hover {
+  border-color: var(--green); transform: translateY(-6px);
+  box-shadow: var(--shadow-card);
+}
+.repo-card-top { display: flex; justify-content: space-between; align-items: center; }
+.repo-icon { font-size: 1.4rem; }
+.repo-star { color: #ffcf5c; font-weight: 700; font-size: .9rem; }
+.repo-card h3 { font-size: 1.1rem; word-break: break-all; }
+.repo-desc {
+  color: var(--muted); font-size: .9rem; flex: 1;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.repo-meta { display: flex; gap: 16px; color: var(--meta-ink); font-size: .8rem; flex-wrap: wrap; }
+.empty-state {
+  background: var(--panel); border: 1px dashed var(--border);
+  border-radius: var(--radius); padding: 60px 24px; text-align: center;
+  color: var(--muted); display: flex; flex-direction: column; gap: 16px; align-items: center;
+}
+
+/* ---------------- repo page */
+.repo-hero { padding: calc(var(--header-offset) + 40px) 24px 40px; border-bottom: 1px solid var(--border); background: radial-gradient(ellipse 60% 50% at 50% 0%, color-mix(in srgb, var(--glow) 8%, transparent), transparent); }
+/* The profile page sits lower than the repo page. That page opens straight into
+   a repository name and its breadcrumb, where the tighter spacing reads as
+   deliberate; the profile starts with a large avatar, and at the shared value
+   the header, the avatar and the level panel below all crowded each other.
+   Scoped to #profile-custom so every other hero keeps the original spacing. */
+#profile-custom.repo-hero { padding-top: calc(var(--header-offset) + 58px); }
+/* The sections under the profile hero — level, activity, repos. This gap was
+   additive with the one above: dropping the hero by 34px AND these by 34px put
+   68px of new space between the header and the level panel, which read as a
+   hole rather than as breathing room. Only a light extra below. */
+/* The sections under the profile hero — level, activity, repos.
+   Two values stack here, and changing only one looks like nothing happened:
+   this padding, and the 36px margin-top every .result-head carries of its own.
+   Measured, the heading margin is the larger half of the visible gap, so it is
+   trimmed here too. Only the FIRST heading is touched: the ones further down
+   use their margin to separate one block from the next, and flattening those
+   would collapse the rhythm inside the page. */
+#profile-sections { padding-top: 22px; }
+#profile-sections .repos-inner > .result-head:first-child { margin-top: 0; }
+.repo-hero-inner { max-width: 1100px; margin: 0 auto; }
+.repo-crumb-top { color: var(--muted); margin-bottom: 8px; font-size: .95rem; }
+.repo-title { font-size: clamp(2.2rem, 5vw, 3.6rem); font-weight: 900; letter-spacing: -.02em; word-break: break-all; }
+.repo-sub { color: var(--muted); margin: 12px 0 20px; }
+.repo-actions { display: flex; gap: 12px; margin-bottom: 36px; flex-wrap: wrap; }
+.repo-stats { display: flex; gap: 44px; flex-wrap: wrap; }
+.flash-msg {
+  max-width: 1100px; margin: 18px auto 0; padding: 12px 18px;
+  background: color-mix(in srgb, var(--glow) 12%, transparent); border: 1px solid var(--green); border-radius: 10px;
+  color: var(--green); font-weight: 600; width: calc(100% - 48px);
+}
+.file-area { padding: 40px 24px 110px; }
+/* sits in the sticky right column, so it is tuned to that width */
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  background: var(--bg-2); padding: 22px 18px; text-align: center;
+  margin-bottom: 18px; transition: border-color .25s, background .25s;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.upload-zone .upload-hint { font-size: .85rem; line-height: 1.5; }
+.upload-zone .upload-tip { font-size: .76rem; color: var(--ink-soft); }
+.upload-zone code {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 5px; padding: 1px 5px; font-size: .92em;
+}
+.upload-zone .upload-icon { font-size: 1.6rem; }
+.upload-zone.dragover { border-color: var(--green); background: color-mix(in srgb, var(--glow) 7%, transparent); }
+.upload-icon { font-size: 2rem; }
+.upload-hint { color: var(--muted); }
+.upload-progress { width: 100%; max-width: 420px; display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.upload-bar { flex: 1; height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.upload-bar-fill { height: 100%; width: 0; background: var(--green); border-radius: 99px; }
+.upload-pct { font-size: .85rem; color: var(--muted); min-width: 40px; text-align: right; }
+.file-browser, .readme, .comments {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; margin-bottom: 26px;
+}
+.file-browser-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 14px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.crumbs { display: flex; align-items: center; gap: 6px; font-size: .95rem; flex-wrap: wrap; }
+.crumb-sep { color: var(--ink-faint); }
+.crumb-here { color: var(--text); font-weight: 700; }
+/* .file-tools / .tool-label live in the "file tools" block further down, which
+   is the version actually in force — the rules that used to sit here were dead
+   weight that the later block overrode rule for rule. */
+.file-list { list-style: none; }
+.file-row {
+  display: grid;
+  /* checkbox | name | size | date | actions — one row, no wrapping */
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 14px; align-items: center; padding: 12px 20px;
+  border-bottom: 1px solid var(--divider); font-size: .95rem;
+}
+.file-row .file-name { min-width: 0; }
+.file-row:last-child { border-bottom: 0; }
+.file-row:hover { background: var(--row-hover); }
+.file-name {
+  color: var(--text); min-width: 0;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.file-name .row-thumb { flex: none; }
+.file-name .tag-chips { flex: none; }
+.file-name:hover { color: var(--green); }
+.file-size, .file-date { color: var(--meta-ink); font-size: .85rem; white-space: nowrap; }
+.empty-row { color: var(--muted); }
+.readme-title { padding: 16px 20px; border-bottom: 1px solid var(--border); font-size: 1.05rem; }
+.md-body { padding: 24px; color: var(--body-ink); }
+.md-body h1, .md-body h2, .md-body h3 { color: var(--text); margin: 18px 0 10px; }
+.md-body p { margin: 8px 0; }
+.md-body ul { margin: 8px 0 8px 22px; }
+.md-body code { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; font-size: .88em; }
+.md-body pre { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; overflow-x: auto; margin: 12px 0; }
+.md-body pre code { border: 0; background: none; padding: 0; }
+.md-body blockquote { border-left: 3px solid var(--green); padding-left: 14px; color: var(--muted); margin: 10px 0; }
+.md-body hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+.comments { padding-bottom: 20px; }
+.comment { display: flex; gap: 12px; padding: 14px 20px; }
+.comment-body {
+  position: relative;                 /* anchors the corner actions */
+  flex: 1; background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 14px;
+  /* Reserve room on the last line so the actions never cover the text. */
+  padding-bottom: 24px;
+}
+.comment-meta { display: flex; gap: 10px; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+.comment-meta a { color: var(--green); font-weight: 700; }
+.comment-form { display: flex; flex-direction: column; gap: 10px; padding: 6px 20px 0; }
+.comment-form textarea {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); padding: 12px; font-family: var(--font); resize: vertical;
+}
+.comment-form textarea:focus { outline: 1px solid var(--green); }
+.comment-form .btn { align-self: flex-end; }
+.comment-empty, .comment-login { padding: 10px 20px; color: var(--muted); }
+
+/* ---------------- preview modal */
+#preview-modal { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; }
+#preview-modal[hidden] { display: none; }
+.preview-backdrop { position: absolute; inset: 0; background: rgba(4, 6, 5, .8); backdrop-filter: blur(6px); }
+.preview-panel {
+  position: relative; width: min(900px, 92vw); max-height: 86vh;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.preview-content { overflow: auto; padding: 20px; display: grid; place-items: center; min-height: 200px; }
+.preview-content img { max-width: 100%; max-height: 60vh; border-radius: 8px; }
+.preview-content video, .preview-content audio { width: 100%; }
+.preview-content iframe { width: 100%; height: 60vh; border: 0; border-radius: 8px; }
+.preview-content pre { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; overflow: auto; font-size: .85rem; color: var(--body-ink); }
+.preview-foot { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: .9rem; gap: 12px; }
+.preview-close { position: absolute; top: 10px; right: 12px; z-index: 2; background: var(--bg); border-radius: 50%; width: 32px; height: 32px; }
+
+/* ---------------- toasts */
+#toasts { position: fixed; right: 20px; bottom: 20px; z-index: 96; display: flex; flex-direction: column; gap: 10px; }
+.toast {
+  background: var(--panel); border: 1px solid var(--green);
+  border-radius: 12px; padding: 12px 18px; font-size: .92rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+}
+
+/* ---------------- auth pages */
+.auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: calc(var(--header-offset) + 40px) 24px 60px; }
+.auth-card {
+  width: min(460px, 100%); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 18px; padding: 40px 36px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+/* In-page dialogs get more room than the standalone page did. The card is the
+   same width, but everything inside sat at 16px apart, which reads as cramped
+   once there is a title, a subtitle, two labelled inputs, a full-width button
+   and a footnote stacked in it. The form's own rows open up too — the fields
+   are what the eye is working through, so they get the most space. */
+#app-dialog .modal-card { padding: 44px 40px 36px; gap: 20px; }
+#app-dialog .dialog-form { display: flex; flex-direction: column; gap: 18px; }
+#app-dialog .field { gap: 8px; }
+#app-dialog .field input, #app-dialog .field textarea { padding: 13px 15px; }
+#app-dialog .auth-title { margin-bottom: 2px; }
+#app-dialog .auth-alt { margin-top: 2px; }
+.auth-title { font-size: 1.7rem; font-weight: 900; }
+.auth-sub { color: var(--muted); font-size: .93rem; }
+.form-error { color: #ff7b72; font-size: .9rem; background: #ff7b721a; border: 1px solid #ff7b7244; border-radius: 8px; padding: 8px 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: .88rem; }
+.field input, .field textarea {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); padding: 11px 14px; font-size: .95rem; font-family: var(--font);
+}
+.field input:focus, .field textarea:focus { outline: 1px solid var(--green); }
+.auth-alt { text-align: center; color: var(--muted); font-size: .9rem; }
+
+/* ---------------- search extras */
+.result-head { font-size: 1.3rem; margin: 36px 0 18px; }
+.user-grid { display: flex; gap: 14px; flex-wrap: wrap; }
+.user-card {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+  padding: 8px 18px 8px 8px; color: var(--text); font-weight: 700;
+  transition: border-color .2s, transform .2s;
+}
+.user-card:hover { border-color: var(--green); transform: translateY(-3px); }
+
+/* ---------------- people directory (/repos) ----------------
+   The same four-column rhythm as the repo grid, but each card leads with the
+   avatar because this listing is about who someone is, not what they uploaded. */
+.people-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+@media (max-width: 1080px) { .people-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 820px)  { .people-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px)  { .people-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.person-card {
+  display: flex; gap: 13px; align-items: flex-start;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px; color: var(--text);
+  transition: border-color .25s, transform .25s, box-shadow .25s;
+  /* Anchors the glow ring's `inset: 0` to the card. .repo-card gets this from
+     its own layout rule further down; this one had no positioned ancestor, so
+     the ring would have stretched to the page. */
+  position: relative;
+}
+.person-card:hover {
+  border-color: var(--green); transform: translateY(-4px);
+  box-shadow: var(--shadow-card);
+}
+.person-avatar { width: 64px; height: 64px; flex: none; }
+
+/* The six-across list has the narrowest cards on the site, so the avatar grows
+   to fill the extra row height that the three-line meta block leaves behind —
+   otherwise it reads as a small chip floating beside a tall column of text.
+   Scoped to its own container so the four-across strips elsewhere keep the
+   proportion they were tuned at. */
+.people-grid-6 .person-card { gap: 15px; padding: 16px; }
+.people-grid-6 .person-avatar { width: 82px; height: 82px; font-size: 1.9rem; }
+
+/* The full member list stacks its card: avatar on top, then the name and the
+   counts beneath it. Side by side, the six-across column is only ~185px wide
+   and the avatar ate over a third of it, leaving long usernames to wrap or
+   clip; stacking gives the name the full card width. */
+.people-grid-stack .person-card {
+  flex-direction: column; align-items: center; text-align: center;
+  gap: 11px; padding: 18px 12px;
+}
+.people-grid-stack .person-avatar { width: 76px; height: 76px; font-size: 1.7rem; }
+.people-grid-stack .person-body { align-items: center; gap: 7px; width: 100%; }
+.people-grid-stack .person-head { justify-content: center; }
+.people-grid-stack .person-meta { justify-content: center; }
+
+/* The sampler strip on /repos carries no bio, so a card is two lines of text
+   rather than four. Without this the avatar would still set a 64px floor and
+   leave the card mostly empty, so both the avatar and the padding step down and
+   the card shrinks to roughly the height of its own content. */
+.people-grid-tight .person-card { gap: 11px; padding: 11px 13px; align-items: center; }
+.people-grid-tight .person-avatar { width: 44px; height: 44px; font-size: 1.15rem; }
+.people-grid-tight .person-body { gap: 3px; }
+.people-grid-tight .person-meta { font-size: .7rem; }
+
+.person-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.person-head { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.person-head h3 {
+  font-size: .95rem; font-weight: 700; margin: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.person-bio {
+  font-size: .78rem; color: var(--muted); margin: 0; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.person-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: .72rem; color: var(--muted); }
+.people-more { color: var(--muted); font-size: .82rem; margin: 14px 0 0; }
+.people-more a { color: var(--accent, var(--green)); font-weight: 600; }
+
+/* Six across on the full member list. Below that the cards get too narrow for
+   a name and a two-line bio, so it steps down the same way the repo grid does. */
+.people-grid-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1280px) { .people-grid-6 { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 1080px) { .people-grid-6 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 820px)  { .people-grid-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px)  { .people-grid-6 { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------------- discover tabs (empty search) ----------------
+   Siblings of the sort tabs in the repo hero, but they sit in the content area
+   and switch a grid in place rather than reloading with a query, so they are a
+   little larger and centred over what they control. */
+.discover-tabs {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin: 0 0 22px;
+}
+.discover-tab {
+  padding: 9px 20px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--muted); font-weight: 700; font-size: .86rem;
+  transition: border-color .22s, color .22s, background .22s, transform .22s;
+}
+.discover-tab:hover { color: var(--text); border-color: var(--ink-faint); transform: translateY(-2px); }
+.discover-tab.active {
+  color: var(--on-accent); background: var(--accent, var(--green));
+  border-color: transparent;
+}
+.discover-tab.active:hover { transform: none; }
+
+/* A section heading with a control on the right. */
+.result-head-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  /* The heading's own vertical margins are zeroed below, so the row carries the
+     spacing that used to come from them. */
+  margin: 36px 0 18px;
+}
+/* The 18px bottom margin belongs to a heading standing on its own line, and the
+   36px top margin is the space above that line. In this row the heading and its
+   button are centred against each other, so both margins count as part of the
+   heading's box — the text then sits ~18px below the button's centre, which is
+   exactly what made the two look misaligned. Zeroing the vertical margins hands
+   the row's own alignment back to the text itself. */
+.result-head-row .result-head { margin-top: 0; margin-bottom: 0; }
+
+/* ---------------- site owner badge ----------------
+   Marks the account that created the site. Deliberately quiet: a bordered
+   capsule in the accent colour rather than a filled one, so it reads as a
+   label attached to the name and does not compete with the buttons beside it. */
+.owner-tag {
+  flex: none; margin-left: 7px;
+  font-size: .62rem; font-weight: 700; letter-spacing: .06em;
+  line-height: 1;
+  padding: 3px 6px; border-radius: 5px;
+  color: var(--accent, var(--green));
+  border: 1px solid color-mix(in srgb, var(--accent, var(--green)) 45%, transparent);
+  background: color-mix(in srgb, var(--glow) 12%, transparent);
+  vertical-align: middle;
+}
+/* The profile page shows it beside a 46px name. "Half the size" of the search
+   card's badge would be ~4px type, which is unreadable; this steps it down as
+   far as it can go while staying legible, and the padding carries the rest of
+   the size difference so it still reads as the smaller of the two. */
+.owner-tag-sm { font-size: .5rem; padding: 1px 4px; border-radius: 4px; }
+/* The h1 is SplitText-animated, so the badge sits in a row wrapper beside it
+   rather than inside. Aligning to the baseline of a very large line box needs
+   flex rather than vertical-align. */
+.profile-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.search-file-list { display: flex; flex-direction: column; gap: 8px; }
+.search-file-row {
+  display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 18px; color: var(--text); font-size: .92rem;
+  transition: border-color .2s;
+}
+.search-file-row:hover { border-color: var(--green); }
+.sf-name { word-break: break-all; }
+.sf-meta { color: var(--muted); font-size: .82rem; white-space: nowrap; }
+
+/* ---------------- footer */
+#site-footer { border-top: 1px solid var(--border); background: var(--bg-2); margin-top: 40px; }
+.footer-inner {
+  max-width: 1200px; margin: 0 auto; padding: 50px 24px 30px;
+  display: flex; gap: 60px; flex-wrap: wrap; justify-content: space-between;
+}
+.footer-brand { font-weight: 900; font-size: 1.2rem; letter-spacing: .12em; }
+.footer-brand span { color: var(--green); }
+.footer-brand p { color: var(--muted); font-weight: 400; font-size: .9rem; margin-top: 8px; }
+.footer-cols { display: flex; gap: 56px; flex-wrap: wrap; }
+.footer-cols h4 { font-size: .85rem; color: var(--text); margin-bottom: 12px; letter-spacing: .06em; }
+.footer-cols a { display: block; color: var(--muted); font-size: .88rem; padding: 3px 0; }
+.footer-cols a:hover { color: var(--green); }
+.footer-bottom {
+  text-align: center; color: var(--ink-faint); font-size: .82rem;
+  padding: 18px; border-top: 1px solid var(--border);
+}
+
+/* ---------------- avatar */
+.avatar-img {
+  width: 26px; height: 26px; border-radius: 50%; object-fit: cover;
+  flex: none; border: 1px solid var(--border);
+}
+.avatar-img.avatar-xl { width: 132px; height: 132px; }
+/* Comment avatars get their own size: the shared 26px is tuned for the header
+   and the user list, where the avatar is a small identifier beside a name; in a
+   comment it is the anchor of the row and reads as too small next to the
+   message body. */
+.comment > .avatar-img, .comment .comment-avatar { width: 40px; height: 40px; }
+.profile-head { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; }
+.profile-avatar-wrap { position: relative; }
+.avatar-edit {
+  position: absolute; bottom: -2px; right: -2px;
+  background: var(--green); color: var(--on-accent); border-radius: 50%;
+  width: 30px; height: 30px; display: grid; place-items: center;
+  font-size: .85rem; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+}
+.avatar-edit:hover { color: var(--on-accent); transform: scale(1.08); }
+.profile-info { flex: 1; min-width: 260px; }
+.privacy-badge {
+  margin-left: 10px; font-size: .78rem; font-weight: 700;
+  background: #ffcf5c22; color: #ffcf5c; border: 1px solid #ffcf5c55;
+  border-radius: 999px; padding: 2px 10px;
+}
+
+/* ---------------- repo two-column layout */
+.repo-columns { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.repo-main { min-width: 0; }
+.repo-side { display: flex; flex-direction: column; gap: 18px; position: sticky; top: calc(var(--header-offset) + 8px); }
+.side-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px 20px;
+}
+.side-title { font-size: .95rem; margin-bottom: 14px; }
+.side-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.side-list li { display: flex; justify-content: space-between; font-size: .87rem; }
+.side-list span { color: var(--muted); }
+.side-links { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+/* Each link is a row that fills on hover, with the arrow sliding in from the
+   left and the label nudging across. The arrow is always present but sized to
+   zero, so showing it does not reflow the row. */
+.side-links a {
+  display: flex; align-items: center; gap: 9px;
+  font-size: .88rem; padding: 7px 11px; border-radius: 9px;
+  border: 1px solid transparent;
+  transition: background-color .2s, border-color .2s, color .2s;
+}
+.side-links .side-ico { flex: none; font-size: .95rem; transition: transform .25s ease; }
+.side-links .side-label { min-width: 0; }
+.side-links .side-arrow {
+  margin-left: auto; flex: none;
+  opacity: 0; transform: translateX(-6px);
+  transition: opacity .22s ease, transform .28s cubic-bezier(.34,1.56,.64,1);
+}
+.side-links a:hover {
+  background: color-mix(in srgb, var(--accent, var(--green)) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent, var(--green)) 34%, transparent);
+  color: var(--accent, var(--green));
+}
+.side-links a:hover .side-ico { transform: scale(1.18) rotate(-6deg); }
+.side-links a:hover .side-arrow { opacity: 1; transform: translateX(0); }
+.side-links a:focus-visible { outline: 2px solid var(--accent, var(--green)); outline-offset: 2px; }
+.type-bars { display: flex; flex-direction: column; gap: 11px; }
+.type-row { display: grid; grid-template-columns: auto 1fr auto; gap: 9px; align-items: center; font-size: .82rem; }
+.type-label { color: var(--muted); white-space: nowrap; }
+.type-track { height: 7px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.type-fill { height: 100%; width: 0; background: var(--green); border-radius: 99px; }
+.type-pct { color: var(--muted); min-width: 36px; text-align: right; }
+
+/* ---------------- bulk selection */
+.tool-check { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .85rem; cursor: pointer; }
+.tool-check input { accent-color: var(--green); }
+.bulk-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 20px; background: color-mix(in srgb, var(--glow) 10%, transparent); border-bottom: 1px solid var(--border);
+  font-size: .88rem; color: var(--green); font-weight: 600;
+}
+.danger-btn { color: #ff7b72 !important; }
+.danger-btn:hover { color: #ff5c50 !important; }
+.file-check { display: grid; place-items: center; width: 18px; }
+.file-check input { accent-color: var(--green); cursor: pointer; }
+.row-actions { display: flex; gap: 2px; align-items: center; }
+.row-thumb {
+  width: 22px; height: 22px; border-radius: 4px; object-fit: cover;
+  vertical-align: middle; margin-right: 4px; border: 1px solid var(--border);
+}
+.row-icon { margin-right: 2px; }
+.tag-chips { display: inline-flex; gap: 5px; margin-left: 7px; vertical-align: middle; }
+.tag {
+  font-size: .72rem; background: color-mix(in srgb, var(--glow) 12%, transparent); color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--glow) 35%, transparent); border-radius: 999px; padding: 1px 8px;
+  white-space: nowrap;
+}
+
+/* ---------------- confirm / meta modals */
+#confirm-modal, #meta-modal { position: fixed; inset: 0; z-index: 97; display: grid; place-items: center; }
+#confirm-modal[hidden], #meta-modal[hidden] { display: none; }
+.confirm-panel {
+  position: relative; width: min(440px, 92vw); background: var(--panel);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 26px; display: flex; flex-direction: column; gap: 14px;
+}
+.confirm-panel h3 { font-size: 1.15rem; }
+.confirm-panel p { color: var(--muted); font-size: .92rem; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.meta-file { color: var(--green) !important; font-weight: 700; word-break: break-all; }
+
+/* ---------------- heatmap */
+.heatmap-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+/* The grid stretches to fill the card so the panel does not end in dead
+   space on wide screens. Cell size is driven by --hm-cell, set from JS after
+   measuring the container, which keeps every cell exactly square. */
+.heatmap {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  /* Space-between spreads leftover width evenly between columns, so the grid
+     reaches both edges while tiles stay a sane size. */
+  justify-content: space-between;
+}
+/* Each column is exactly one cell wide; the container's 4px gap supplies the
+   horizontal spacing, matching the 4px gap used between rows. */
+.hm-week {
+  display: flex; flex-direction: column; gap: 4px;
+  align-items: center;
+  width: var(--hm-cell, 16px);
+  flex: 0 0 auto;
+}
+/* Cells stay square: aspect-ratio plus a width that flexes with the grid.
+   The negative margin keeps the hover scale from shifting the layout. */
+.hm-day {
+  width: var(--hm-cell, 16px); height: var(--hm-cell, 16px);
+  flex: none;
+  border-radius: 3px;
+  background: var(--inset); border: 1px solid var(--divider);
+  position: relative;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  transform-origin: center;
+}
+.hm-day[data-count]:not([data-count="0"]) { cursor: pointer; }
+.hm-day[data-count]:not([data-count="0"]):hover {
+  transform: scale(1.45); z-index: 5;
+  border-color: var(--accent, var(--green));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--glow) 30%, transparent), 0 4px 14px rgba(0,0,0,.55);
+}
+/* Heatmap intensity ramp, derived from the accent so the whole scale follows
+   the colour picker. The four levels are the same hue at rising strength —
+   accent mixed into the page ground — rather than four fixed greens, which
+   would leave the grid green under a purple accent.
+   mix() against --bg rather than against grey keeps the low steps reading as
+   "this cell is barely used" instead of as a muddy version of the top step. */
+.hm-day.lv0 { background: var(--inset); border-color: var(--divider); }
+.hm-day.lv1 { background: color-mix(in srgb, var(--accent, var(--green)) 30%, var(--bg)); border-color: transparent; }
+.hm-day.lv2 { background: color-mix(in srgb, var(--accent, var(--green)) 52%, var(--bg)); border-color: transparent; }
+.hm-day.lv3 { background: color-mix(in srgb, var(--accent, var(--green)) 76%, var(--bg)); border-color: transparent; }
+.hm-day.lv4 {
+  background: var(--accent, var(--green));
+  border-color: var(--accent, var(--green));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--glow) 40%, transparent);
+}
+/* The legend chips are the same component, so they follow automatically. */
+.hm-legend { display: flex; align-items: center; gap: 4px; margin-top: 14px; color: var(--muted); font-size: .78rem; }
+.hm-legend .hm-day { width: 12px; height: 12px; aspect-ratio: auto; flex: none; }
+/* Month ticks are absolutely positioned against the real column index, so
+   each label sits above the week it actually names. */
+.hm-months {
+  position: relative; height: 16px; margin-bottom: 4px;
+  color: var(--ink-soft); font-size: .72rem;
+}
+.hm-month-tick {
+  position: absolute; top: 0;
+  left: 0;                     /* overwritten by JS with the measured column */
+  white-space: nowrap;
+}
+.heatmap-wrap .hm-day.future { background: transparent; border-color: transparent; }
+
+/* Activity tooltip, in place of the cells' native `title`. Fixed-positioned
+   because it is appended to <body> — the heatmap card clips its own overflow,
+   so a tooltip inside it would be cut off at the card's edge. */
+.hm-tip {
+  position: fixed; z-index: 60; pointer-events: none;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 11px; border-radius: 9px;
+  background: var(--row-hover-2); border: 1px solid var(--border);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .55);
+  font-size: .76rem; line-height: 1.45; white-space: nowrap;
+}
+/* The little arrow points back at the cell; it flips when the tooltip has to
+   render below the cell instead of above. */
+.hm-tip::after {
+  content: ""; position: absolute; left: 50%; bottom: -4px;
+  width: 7px; height: 7px; margin-left: -3.5px;
+  background: var(--row-hover-2); border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.hm-tip.below::after {
+  bottom: auto; top: -4px;
+  border-right: 0; border-bottom: 0;
+  border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+}
+.hm-tip-date { color: var(--text); font-weight: 700; }
+.hm-tip-count { color: var(--muted); }
+.type-chips { display: flex; gap: 12px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; }
+.type-chip { font-size: .88rem; color: var(--muted); }
+.type-chip strong { color: var(--green); margin-left: 5px; }
+
+/* ---------------- readme editor ----------------
+   Present it as a dialog, matching the login and register surfaces. It is
+   wider than those because it holds a code area, and a textarea needs a
+   comfortable measure to be usable. */
+/* Both classes on the selector so this beats `.modal-card`'s own width, which
+   is declared later in the file and sets `flex: 0 0 auto` alongside it — in
+   this layout the flex basis was what actually constrained the card. */
+.auth-card.readme-modal-card {
+  width: min(820px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  flex: 0 0 auto;
+  max-height: 88vh;
+  padding: 40px 36px 30px;
+  gap: 18px;
+}
+.readme-modal-card textarea {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); padding: 16px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: .9rem; line-height: 1.7; resize: vertical;
+}
+.readme-modal-card textarea:focus { outline: 1px solid var(--accent, var(--green)); }
+.readme-modal-card .auth-sub { margin: 0; }
+.readme-modal-card code {
+  background: var(--bg); border-radius: 4px; padding: 1px 5px;
+  font-size: .85em; color: var(--text);
+}
+.editor-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.editor-count { color: var(--muted); font-size: .85rem; }
+.editor-actions { display: flex; gap: 10px; }
+/* This is a <button> now that it opens the editor in place. As an <a> it
+   inherited the link styling and its own background was never declared, so the
+   browser's default button fill (#F0F0F0) showed up as a grey pill on a dark
+   panel. Everything the anchor was getting for free is spelled out here. */
+.readme-edit-link {
+  float: right; font-size: .8rem; font-weight: 600;
+  font-family: var(--font); cursor: pointer;
+  background: none; border: 0; padding: 0;
+  color: var(--accent, var(--green));
+  appearance: none; -webkit-appearance: none;
+  transition: color .2s, opacity .2s;
+}
+.readme-edit-link:hover { color: var(--text); }
+.readme-edit-link:focus-visible { outline: 2px solid var(--accent, var(--green)); outline-offset: 2px; border-radius: 3px; }
+.field-check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .9rem; cursor: pointer; }
+.field-check input { accent-color: var(--green); }
+
+/* ---------------- responsive */
+@media (max-width: 1080px) {
+  .repo-columns { grid-template-columns: 1fr; }
+  .repo-side { position: static; }
+}
+@media (max-width: 860px) {
+  .main-nav, .header-search { display: none; }
+  .hero-stats { gap: 28px; }
+  .file-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .file-date, .file-size { display: none; }
+  .footer-cols { gap: 30px; }
+}
+
+/* ================= v11 additions ================= */
+
+/* search suggestions */
+.search-suggest {
+  position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 6px; z-index: 90; box-shadow: 0 14px 40px rgba(0,0,0,.55);
+  max-height: 320px; overflow-y: auto;
+}
+.search-suggest[hidden] { display: none; }
+.suggest-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 9px; color: var(--text);
+  font-size: .87rem; cursor: pointer;
+}
+.suggest-item:hover, .suggest-item.active { background: var(--row-hover-2); }
+.suggest-type { color: var(--muted); font-size: .75rem; margin-left: auto; white-space: nowrap; }
+.suggest-empty { padding: 10px 12px; color: var(--muted); font-size: .85rem; }
+.search-suggest mark { background: none; color: var(--accent, var(--green)); font-weight: 800; }
+
+/* nav active state */
+.main-nav .nav-link { position: relative; }
+.main-nav .nav-link.active { color: var(--text); }
+.main-nav .nav-link.active::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -6px;
+  height: 2px; border-radius: 2px; background: var(--accent, var(--green));
+}
+
+/* ================= card glow =================
+   The same light as the search field, on the repository and member cards. The
+   ::after ring is the card version of the search field's ::before: a 1px
+   content-box mask leaves only the ring showing, lit near the pointer and dark
+   away from it, so the card's own border stays put and the light travels along
+   it. --mx / --my / --glow-radius are written by attachGlow().
+
+   Both cards already carry `position: relative` from their base rule, so the
+   ring anchors to the card without anything else to add. */
+.repo-card::after,
+.person-card::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  padding: 1px; pointer-events: none;
+  background: radial-gradient(var(--glow-radius, 150px) circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--accent, var(--green)) 85%, transparent), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0; transition: opacity .25s;
+}
+/* Only the script's class lights it. A :hover rule here would show the ring
+   before a position had been recorded, i.e. as a glow fixed at the centre. */
+.repo-card.glow-on::after,
+.person-card.glow-on::after { opacity: 1; }
+/* While the light is travelling, the hover border colour would fight it — the
+   card would be lit all the way round in addition to the moving light. The ring
+   takes over, so the plain border steps aside. */
+.repo-card.glow-on,
+.person-card.glow-on { border-color: var(--border); }
+
+/* The outer bloom spilling past the card's edge, so the card reads as lit
+   rather than merely outlined.
+   Drawn with box-shadow, not a blurred pseudo-element: .repo-card carries
+   `overflow: hidden` (its cover art bleeds to the card edge) and that clips any
+   child reaching outside the border box — a blurred ::before would be cut off
+   at exactly the edge the glow needs to cross. A box-shadow paints outside the
+   border box and ignores the element's own overflow, so one rule serves both
+   card types.
+   The spread is uniform because a box-shadow cannot be positioned; the
+   travelling highlight stays on the ::after ring, and this is the ambient wash
+   around it. --glow-tint is set by the script so the halo carries the accent
+   rather than a hardcoded colour. */
+.repo-card.glow-on,
+.person-card.glow-on {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent, var(--green)) 30%, transparent),
+    0 0 22px 2px color-mix(in srgb, var(--accent, var(--green)) 34%, transparent),
+    var(--shadow-card);
+}
+
+/* sort tabs */
+.sort-tabs { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+.sort-tab {
+  padding: 7px 16px; border-radius: 999px; font-size: .88rem; font-weight: 600;
+  border: 1px solid var(--border); color: var(--muted);
+  transition: border-color .2s, color .2s, background .2s;
+  /* These are <button>s now that they sort in place, so the browser's own
+     button styling has to be cleared off before the pill shows through. */
+  background: transparent; font-family: var(--font); cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+}
+.sort-tab:hover { color: var(--text); border-color: var(--ink-faint); }
+.sort-tab.active { color: var(--accent, var(--green)); border-color: var(--accent, var(--green)); background: color-mix(in srgb, var(--glow) 8%, transparent); }
+.sort-tab:focus-visible { outline: 2px solid var(--accent, var(--green)); outline-offset: 2px; }
+/* A pressed tab gives its own feedback while the fetch is out, so the click
+   does not feel like it was dropped. */
+.sort-tab.is-loading { color: var(--accent, var(--green)); border-color: var(--accent, var(--green)); }
+.sort-tab.is-loading::after {
+  content: ""; display: inline-block; vertical-align: middle;
+  width: 9px; height: 9px; margin-left: 7px; margin-top: -1px;
+  border-radius: 50%; border: 1.6px solid currentColor; border-top-color: transparent;
+  animation: sort-spin .6s linear infinite;
+}
+@keyframes sort-spin { to { transform: rotate(360deg); } }
+/* The grid is replaced mid-flight, so a short fade keeps the swap from
+   flashing while the new cards arrive. */
+.sort-panel { transition: opacity .18s ease; }
+.sort-panel.is-swapping { opacity: .45; }
+
+/* community */
+.community-cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.comment-feed { display: flex; flex-direction: column; gap: 14px; }
+.feed-item {
+  display: block; background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px 20px; color: var(--text);
+  transition: border-color .22s, transform .22s;
+}
+.feed-item:hover { border-color: var(--accent, var(--green)); transform: translateY(-3px); }
+.feed-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.feed-meta { display: flex; gap: 7px; align-items: center; font-size: .88rem; flex-wrap: wrap; }
+.feed-meta span { color: var(--muted); }
+.feed-repo { color: var(--accent, var(--green)) !important; font-weight: 700; }
+.feed-time { color: var(--ink-soft); font-size: .78rem; }
+.feed-body { color: var(--body-ink); font-size: .93rem; padding-left: 38px; }
+.side-list-link li a { color: var(--text); font-size: .87rem; }
+.side-list-link li a:hover { color: var(--accent, var(--green)); }
+.contributor-list { display: flex; flex-direction: column; gap: 10px; }
+.contributor { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: .88rem; }
+.contributor:hover .contributor-name { color: var(--accent, var(--green)); }
+.contributor-name { font-weight: 600; }
+.contributor-stat { margin-left: auto; color: var(--muted); font-size: .78rem; }
+
+/* comment hover actions */
+.comment { position: relative; }
+.comment:hover { background: rgba(255,255,255,.015); border-radius: 12px; }
+/* Plain-text actions in the bottom-right corner of the bubble, revealed on
+   hover so the comment stays uncluttered while reading. */
+.comment-actions {
+  position: absolute; right: 12px; bottom: 4px; z-index: 3;
+  display: flex; align-items: center; gap: 7px;
+  opacity: 0; visibility: hidden;
+  font-size: .78rem; line-height: 1;
+  transition: opacity .18s ease, visibility .18s;
+}
+.text-btn {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--muted); font-family: var(--font);
+  font-size: .78rem; line-height: 1;
+  transition: color .16s;
+}
+.text-btn:hover { color: var(--accent, var(--green)); }
+.text-btn.comment-del:hover { color: #ff7b72; }
+.action-sep { color: var(--ink-faint); user-select: none; }
+/* Reveal on hover of the whole row, and keep them reachable by keyboard.
+   Touch devices have no hover, so the buttons stay visible there. */
+.comment:hover > .comment-body > .comment-actions,
+.comment-body:focus-within > .comment-actions,
+.comment-actions:focus-within { opacity: 1; visibility: visible; }
+@media (hover: none) {
+  .comment-actions { opacity: 1; visibility: visible; }
+}
+.comment-edit-area { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.comment-edit-area textarea {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); padding: 9px 11px; font-family: var(--font); font-size: .9rem; resize: vertical;
+}
+.comment-edit-area textarea:focus { outline: 1px solid var(--accent, var(--green)); }
+.comment-edit-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.comment-edited { color: var(--ink-soft); font-size: .74rem; margin-left: 6px; }
+
+/* settings drawer */
+#settings-panel { position: fixed; inset: 0; z-index: 98; }
+#settings-panel[hidden] { display: none; }
+.settings-backdrop { position: absolute; inset: 0; background: rgba(4,6,5,.65); backdrop-filter: blur(3px); }
+.settings-drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(388px, 92vw);
+  background: var(--bg-2); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto; padding: 0 0 20px;
+}
+.settings-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 22px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg-2); z-index: 1;
+}
+.settings-head h2 { font-size: 1.1rem; }
+.settings-group { padding: 18px 22px 6px; border-bottom: 1px solid var(--border); }
+.settings-group:last-of-type { border-bottom: 0; }
+.settings-group h3 {
+  font-size: .76rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-soft); margin-bottom: 12px;
+}
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 10px 0; cursor: pointer; font-size: .92rem;
+}
+.setting-row small { display: block; color: var(--muted); font-size: .78rem; margin-top: 2px; }
+.setting-col { flex-direction: column; align-items: stretch; gap: 8px; cursor: default; }
+.switch {
+  appearance: none; width: 42px; height: 24px; border-radius: 999px; flex: none;
+  background: var(--shade); border: 1px solid var(--border); cursor: pointer; position: relative;
+  transition: background .25s, border-color .25s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  border-radius: 50%; background: #7b837c; transition: transform .25s, background .25s;
+}
+.switch:checked { background: color-mix(in srgb, var(--glow) 22%, transparent); border-color: var(--accent, var(--green)); }
+.switch:checked::after { transform: translateX(18px); background: var(--accent, var(--green)); }
+.accent-picker { display: flex; gap: 10px; }
+.accent-dot {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--c);
+  border: 2px solid transparent; cursor: pointer; padding: 0;
+  transition: transform .2s, border-color .2s;
+}
+.accent-dot:hover { transform: scale(1.12); }
+.accent-dot.active { border-color: var(--text); transform: scale(1.12); }
+
+/* Theme picker: three named options rather than swatches alone, because
+   "follow the system" has no single colour to show. Each carries a small
+   preview of the surface it selects so the choice is legible at a glance. */
+.theme-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.theme-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 10px 6px; cursor: pointer;
+  background: var(--bg); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 10px;
+  font-family: var(--font); font-size: .78rem; font-weight: 600;
+  transition: border-color .2s, color .2s, background-color .2s;
+}
+.theme-opt:hover { color: var(--text); border-color: var(--ink-faint); }
+.theme-opt.active {
+  color: var(--accent, var(--green));
+  border-color: var(--accent, var(--green));
+  background: color-mix(in srgb, var(--accent, var(--green)) 10%, transparent);
+}
+.theme-opt:focus-visible { outline: 2px solid var(--accent, var(--green)); outline-offset: 2px; }
+/* A miniature of the theme: page surface with a line of "text" in it, so the
+   two options read as the palettes they are. These colours are intentionally
+   literal — they depict a theme rather than belonging to one, and would be
+   meaningless if they followed the active palette. */
+.theme-swatch {
+  width: 34px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+  display: block; position: relative; overflow: hidden;
+}
+.theme-swatch::after {
+  content: ""; position: absolute; left: 5px; right: 5px; top: 5px; height: 4px;
+  border-radius: 2px;
+}
+.theme-swatch-dark { background: #14171a; border-color: #2a2e2b; }
+.theme-swatch-dark::after { background: #e8ebe8; box-shadow: 0 7px 0 var(--ink-faint); }
+.theme-swatch-light { background: #ffffff; border-color: #d8dcd8; }
+.theme-swatch-light::after { background: #14171a; box-shadow: 0 7px 0 #9aa29b; }
+/* Split diagonally: the same picture in both palettes. */
+.theme-swatch-system {
+  background: linear-gradient(115deg, #14171a 0 50%, #ffffff 50% 100%);
+}
+.theme-swatch-system::after {
+  background: linear-gradient(115deg, #e8ebe8 0 50%, #14171a 50% 100%);
+  box-shadow: 0 7px 0 rgba(120, 130, 122, .55);
+}
+.settings-select {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 9px; padding: 9px 12px; font-family: var(--font); font-size: .9rem; width: 100%;
+}
+.settings-foot {
+  display: flex; gap: 10px; justify-content: space-between; align-items: center;
+  padding: 18px 22px 0; margin-top: auto;
+}
+.motion-toggle.active { color: var(--accent, var(--green)); border-color: var(--accent, var(--green)); }
+
+/* accent override */
+body.has-accent .btn-green { background: var(--accent); color: var(--on-accent); }
+body.has-accent .btn-green:hover { filter: brightness(.9); }
+/* The wordmark appears three times — the intro overlay, the header and the
+   footer — and all three have to follow the accent together. .footer-brand was
+   missing from this list, so the footer's HUB stayed brand-green while the
+   header's took the accent: the same word in two colours on one page. */
+body.has-accent .stat-num, body.has-accent .brand span,
+body.has-accent .footer-brand span, body.has-accent .intro-brand span,
+body.has-accent .hero-kicker, body.has-accent .why-text .word.hl { color: var(--accent); }
+body.has-accent .avatar { background: linear-gradient(135deg, var(--accent), #0a8f33); }
+body.has-accent #scroll-progress { background: linear-gradient(90deg, var(--accent), #7dffd0); }
+body.has-accent .type-fill, body.has-accent .upload-bar-fill { background: var(--accent); }
+body.has-accent .flash-msg { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--glow) 9%, transparent); }
+body.has-accent .tag { color: var(--accent); border-color: color-mix(in srgb, var(--glow) 32%, transparent); background: color-mix(in srgb, var(--glow) 9%, transparent); }
+/* No lv4 override here any more: the ramp already derives from --glow, which
+   follows the accent. Painting lv4 in the raw accent made the busiest day a
+   saturated purple tile in an otherwise neutral grid. */
+body.has-accent .repo-card:hover, body.has-accent .feature-card:hover { border-color: var(--accent); }
+body.has-accent .file-name:hover { color: var(--accent); }
+body.has-accent .crumb-here, body.has-accent .comment-meta a { color: var(--accent); }
+
+/* compact list + thumbnail toggle */
+body.compact .file-row { padding: 7px 20px; font-size: .9rem; }
+body.compact .file-row .row-thumb { width: 18px; height: 18px; }
+body.hide-thumbs .row-thumb { display: none; }
+
+/* ================= end v11 ================= */
+
+/* pointer-follow layer on the hero */
+.pointer-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.ptr { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
+.ptr-ring {
+  width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent, #0ae448) 55%, transparent);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--accent, #0ae448) 22%, transparent) inset;
+}
+.ptr-dot {
+  width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
+  background: var(--accent, #0ae448);
+  box-shadow: 0 0 12px var(--accent, #0ae448);
+}
+.ptr-square {
+  width: 34px; height: 34px; margin: -17px 0 0 -17px;
+  border: 1px solid color-mix(in srgb, var(--accent, #0ae448) 70%, transparent);
+}
+.ptr-cross-h {
+  width: 44px; height: 1px; margin: -0.5px 0 0 -22px;
+  background: linear-gradient(90deg, transparent, var(--accent, #0ae448), transparent);
+  opacity: .65;
+}
+.ptr-cross-v {
+  width: 1px; height: 44px; margin: -22px 0 0 -0.5px;
+  background: linear-gradient(180deg, transparent, var(--accent, #0ae448), transparent);
+  opacity: .65;
+}
+.ptr-ripple {
+  position: absolute; width: 300px; height: 300px; margin: -150px 0 0 -150px;
+  border-radius: 50%; border: 1px solid var(--accent, #0ae448);
+  pointer-events: none;
+}
+@media (hover: none) { .pointer-layer { display: none; } }
+/* interface zoom: scales type and spacing without touching layout width */
+.zoom-slider { width: 100%; accent-color: var(--accent, var(--green)); }
+#zoom-label { color: var(--accent, var(--green)); font-weight: 700; }
+
+/* avatar action menu (merged upload / preset / remove) */
+.avatar-menu {
+  position: fixed; z-index: 93;
+  width: 248px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; padding: 8px; box-shadow: 0 16px 44px rgba(0,0,0,.6);
+}
+.avatar-menu[hidden] { display: none; }
+/* Layer order, low to high:
+   80 header · 90 scroll progress · 93 avatar menu · 95 modals
+   96 toasts · 97 confirm / follow · 98 settings · 100 splash */
+.avatar-menu-item {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  background: none; border: 0; color: var(--text); font-family: var(--font);
+  font-size: .88rem; padding: 9px 12px; border-radius: 9px; cursor: pointer; text-align: left;
+}
+.avatar-menu-item:hover { background: var(--row-hover-2); }
+.avatar-menu-item.danger { color: #ff7b72; }
+.avatar-menu-item.danger:hover { background: rgba(255,123,114,.1); }
+.avatar-menu-sep {
+  font-size: .72rem; letter-spacing: .08em; color: var(--ink-soft);
+  padding: 10px 12px 6px; text-transform: uppercase;
+}
+.avatar-preset-row { display: flex; gap: 7px; padding: 2px 10px 6px; }
+.preset-avatar {
+  width: 32px; height: 32px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; background: none; overflow: hidden;
+  transition: transform .18s, border-color .18s;
+}
+.preset-avatar:hover { transform: scale(1.14); border-color: var(--accent, var(--green)); }
+.preset-avatar img { width: 100%; height: 100%; display: block; }
+
+/* profile action row */
+.profile-head .repo-actions { align-items: center; }
+.follow-count {
+  background: rgba(4,20,10,.25); border-radius: 999px;
+  padding: 1px 7px; font-size: .8rem; margin-left: 2px;
+}
+
+/* preset row on the crop page */
+.preset-avatars { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.preset-label { color: var(--muted); font-size: .85rem; }
+.preset-row { display: flex; gap: 10px; }
+.preset-row .preset-avatar { width: 42px; height: 42px; }
+.shape-fixed {
+  padding: 6px 16px; border-radius: 999px; font-size: .85rem; font-weight: 600;
+  border: 1px solid var(--accent, var(--green)); color: var(--accent, var(--green));
+  background: color-mix(in srgb, var(--glow) 8%, transparent);
+}
+
+/* password reveal */
+.pw-wrap { position: relative; display: block; }
+.pw-wrap input { width: 100%; padding-right: 44px; }
+.pw-toggle {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; color: var(--muted); cursor: pointer;
+  font-size: 1rem; padding: 6px 8px; border-radius: 7px; line-height: 1;
+}
+.pw-toggle:hover { color: var(--accent, var(--green)); background: rgba(255,255,255,.04); }
+.pw-toggle.on { color: var(--accent, var(--green)); }
+
+/* clickable follower / following stats */
+/* Follower / following counters are clickable, so they need to say so.
+   The scale has to be declared with !important: the scroll-reveal sweep writes
+   an inline `transform: translate(0px, 0px)` onto every revealed element, and
+   an inline transform beats any :hover rule — a plain `transform: scale()` here
+   silently did nothing, and switching to the standalone `scale` property did
+   not help either, because GSAP keeps rewriting the shorthand `transform` on
+   this element on every reveal pass. Only !important wins against an inline
+   style. `scale(1.08)` replaces the reveal's identity transform, which is
+   harmless since the reveal has already settled by the time a hover can land. */
+.stat-btn {
+  background: none; border: 0; font-family: var(--font); cursor: pointer;
+  padding: 0; text-align: left; border-radius: 8px;
+  transform-origin: left center;
+  transition: transform .22s cubic-bezier(.34, 1.4, .64, 1);
+}
+.stat-btn:hover { transform: scale(1.08) !important; }
+.stat-btn:hover .stat-label { color: var(--accent, var(--green)); }
+.stat-btn:active { transform: scale(.94) !important; transition-duration: .09s; }
+.stat-btn:focus-visible { outline: 2px solid var(--accent, var(--green)); outline-offset: 3px; }
+.stat-btn .stat-num { display: block; }
+
+/* follower list modal */
+#follow-modal { position: fixed; inset: 0; z-index: 97; display: grid; place-items: center; }
+#follow-modal[hidden] { display: none; }
+.follow-panel {
+  position: relative; width: min(420px, 92vw); max-height: 70vh;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.follow-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.follow-head h3 { font-size: 1.05rem; }
+.follow-body { overflow-y: auto; padding: 8px; }
+.follow-user {
+  display: flex; align-items: center; gap: 11px; padding: 10px 12px;
+  border-radius: 10px; color: var(--text); font-size: .92rem;
+}
+.follow-user:hover { background: var(--row-hover-2); }
+.follow-user .avatar, .follow-user .avatar-img { width: 32px; height: 32px; }
+.follow-empty { padding: 28px; text-align: center; color: var(--muted); font-size: .9rem; }
+
+/* ================= v13: modal pages (login / new repo) ================= */
+/* Modal pages cover the viewport exactly and centre their card in it. The
+   body has a scroll offset from the smoother, so the card is positioned
+   against the viewport rather than the flow. */
+/* The smoother transforms an ancestor, which makes `position: fixed` resolve
+   against that ancestor instead of the viewport. Sizing with vh/vw and a
+   translate-centre keeps the card in the middle regardless. */
+.modal-page {
+  position: fixed; z-index: 95;
+  top: 50%; left: 50%;
+  width: 100vw; height: 100vh;
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; margin: 0;
+}
+.modal-page .modal-card {
+  margin: 0; flex: none;
+  max-height: calc(100vh - 48px); overflow-y: auto;
+}
+.modal-card {
+  position: relative; z-index: 1;
+  /* A flex item shrinks to its content by default; pin the width so all
+     three modal forms (login / register / new repo) match exactly. */
+  flex: 0 0 auto;
+  width: 460px;
+  max-width: calc(100vw - 48px);
+  max-height: 88vh; overflow-y: auto;
+  box-sizing: border-box;
+}
+/* Close affordance for the in-page dialogs. The backdrop and Esc both close
+   them, but a visible control is what people reach for first. */
+.dialog-x {
+  position: absolute; top: 14px; right: 14px;
+  width: 28px; height: 28px; border-radius: 8px;
+  display: grid; place-items: center;
+  background: none; border: 0; cursor: pointer;
+  color: var(--muted); font-size: .95rem; line-height: 1;
+  transition: color .18s, background .18s;
+}
+.dialog-x:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
+
+/* ================= v13: WeChat-style community ================= */
+/* The chat is a floating card, the way WeChat's desktop window sits on the
+   desktop rather than filling it: it keeps a margin on every side, has its own
+   rounded frame, and the page ground stays visible around it. Width comes from
+   --chat-w (the settings slider, 50–80%); the height is a fixed share of the
+   viewport so the card does not stretch or squash with the message count. */
+.chat-shell {
+  display: grid; grid-template-columns: 280px minmax(0, 1fr);
+  height: 100vh; padding-top: var(--header-offset);
+  background: var(--bg);
+}
+/* ---------------- chat background ----------------
+   Mirrors the profile banner's layer: absolute against the section, inner box
+   oversized so scale, position and blur all have room to move without the
+   image's own edges entering the frame. `background-size: 170%` is what gives
+   the vertical control its travel — at exactly `cover` the leftover image size
+   is nil and the percentages all resolve to the same place. */
+.chat-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.chat-bg-inner {
+  position: absolute;
+  left: -30%; right: -30%;
+  top: -70%; bottom: -70%;
+  background-size: 170%;
+  background-repeat: no-repeat;
+  background-position: center;
+  will-change: transform, filter;
+}
+/* The card keeps its own backing so the conversation stays readable over any
+   image; the background shows around it and through the gaps. */
+.chat-shell-single .chat-main { z-index: 1; }
+/* Single-room variant: a centred card, WeChat-desktop style. The width is the
+   settings slider; the height is 80vh so the page shows through above and
+   below. --chat-w is set by applyChatWidth() in app.js. */
+.chat-shell-single {
+  grid-template-columns: minmax(0, 1fr);
+  /* The section is taller than the card on purpose: the background is absolute
+     against this element, and 48px of bottom padding left it ending almost
+     flush with the card — the image looked cut off underneath. The extra
+     bottom space gives the backdrop somewhere to extend to. */
+  height: auto; min-height: 0;
+  padding: calc(var(--header-offset) + 28px) 24px 180px;
+  place-items: start center;
+  /* The background layer is absolute against this section. Without the
+     positioning context it would resolve against the page and cover the header
+     and footer too. */
+  position: relative;
+}
+.chat-shell-single .chat-main {
+  width: var(--chat-w, 80%);
+  max-width: 100%;
+  /* 80vh plus the header offset and the padding above would overflow a short
+     viewport, so the height is capped by whatever is actually left. */
+  height: min(80vh, calc(100vh - var(--header-offset) - 88px));
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+  overflow: hidden;
+}
+/* Narrow screens: the slider's floor is still too wide to read comfortably on a
+   phone, so the card takes the full width instead of honouring the setting. */
+@media (max-width: 760px) {
+  .chat-shell-single { padding: 0 10px 20px; }
+  .chat-shell-single .chat-main { width: 100%; height: calc(100vh - var(--header-offset) - 20px); }
+}
+.chat-side {
+  border-right: 1px solid var(--border); background: var(--bg-2);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.chat-side-head { padding: 20px 20px 14px; border-bottom: 1px solid var(--border); }
+.chat-side-head h1 { font-size: 1.25rem; font-weight: 900; }
+.chat-side-head p { color: var(--muted); font-size: .82rem; margin-top: 3px; }
+.chat-side-list { flex: 1; overflow-y: auto; padding: 8px; }
+.chat-side-empty { padding: 24px 16px; color: var(--muted); font-size: .88rem; text-align: center; }
+
+.chat-channel {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  background: none; border: 0; border-radius: 10px; cursor: pointer;
+  padding: 10px 12px; font-family: var(--font); text-align: left;
+  color: var(--text); transition: background .18s;
+}
+.chat-channel:hover { background: var(--row-hover-2); }
+.chat-channel.active { background: var(--shade); }
+.chat-channel-avatar {
+  width: 38px; height: 38px; flex: none; border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent, var(--green)), #0a8f33);
+  color: var(--on-accent); font-weight: 800; display: grid; place-items: center;
+  font-size: .95rem;
+}
+.chat-channel-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.chat-channel-name {
+  font-weight: 600; font-size: .92rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chat-channel-last {
+  color: var(--muted); font-size: .78rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chat-badge {
+  flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  background: var(--accent, var(--green)); color: var(--on-accent);
+  font-size: .72rem; font-weight: 800; display: grid; place-items: center;
+}
+
+.chat-main { display: flex; flex-direction: column; overflow: hidden; }
+.chat-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 22px; border-bottom: 1px solid var(--border); background: var(--bg-2);
+}
+.chat-header-avatar {
+  width: 34px; height: 34px; border-radius: 8px; flex: none;
+  background: var(--shade); color: var(--accent, var(--green));
+  display: grid; place-items: center; font-weight: 800;
+}
+.chat-header-info { display: flex; flex-direction: column; min-width: 0; }
+.chat-header-info strong { font-size: .98rem; }
+.chat-header-sub { color: var(--muted); font-size: .78rem; }
+.chat-header .btn { margin-left: auto; }
+/* Inside the card the frame already provides the border, so the header's own
+   rule would double up against it. */
+.chat-shell-single .chat-header { background: transparent; }
+
+.chat-msg-area {
+  flex: 1; overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 4px;
+}
+/* Keep the message column clear of the card's rounded corners: the scrollbar
+   sits in the gutter, and the last bubble should not tuck under the frame. */
+.chat-shell-single .chat-msg-area { padding-right: 16px; }
+/* The scrollbar rides just inside the card frame. Without this the thumb hugs
+   the border and the rounded corner clips it. */
+.chat-shell-single .chat-msg-area::-webkit-scrollbar { width: 10px; }
+.chat-shell-single .chat-msg-area::-webkit-scrollbar-thumb { border-width: 3px; }
+.chat-empty {
+  margin: auto; color: var(--muted); font-size: .92rem; text-align: center;
+}
+.chat-date-sep {
+  align-self: center; color: var(--ink-soft); font-size: .74rem;
+  background: var(--inset); border-radius: 6px; padding: 3px 10px; margin: 14px 0 6px;
+}
+
+.chat-msg { display: flex; gap: 10px; margin: 6px 0; max-width: 78%; }
+.chat-msg.mine { align-self: flex-end; flex-direction: row-reverse; }
+.chat-msg-avatar {
+  width: 36px; height: 36px; border-radius: 8px; flex: none;
+  display: grid; place-items: center; font-weight: 800; font-size: .88rem;
+  background: linear-gradient(135deg, #3b9dff, #1d6fd0); color: #041028;
+  overflow: hidden;
+}
+.chat-msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.chat-msg.mine .chat-msg-avatar {
+  background: linear-gradient(135deg, var(--accent, var(--green)), #0a8f33); color: var(--on-accent);
+}
+.chat-msg-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chat-msg.mine .chat-msg-body { align-items: flex-end; }
+.chat-msg-name { color: var(--muted); font-size: .76rem; padding: 0 2px; }
+.chat-msg.mine .chat-msg-name { text-align: right; }
+
+.chat-bubble {
+  position: relative; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 14px; font-size: .92rem; line-height: 1.6;
+  word-break: break-word; white-space: pre-wrap;
+}
+.chat-bubble::before {
+  content: ""; position: absolute; top: 12px; left: -6px;
+  width: 0; height: 0; border: 6px solid transparent;
+  border-right-color: var(--border); border-left: 0;
+}
+.chat-msg.mine .chat-bubble {
+  background: color-mix(in srgb, var(--accent, var(--green)) 16%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent, var(--green)) 40%, var(--border));
+}
+.chat-msg.mine .chat-bubble::before {
+  left: auto; right: -6px; border-right: 0;
+  border-left-color: color-mix(in srgb, var(--accent, var(--green)) 40%, var(--border));
+}
+.chat-bubble a { color: var(--accent, var(--green)); text-decoration: underline; }
+.chat-msg-time { color: var(--ink-soft); font-size: .72rem; padding: 0 3px; }
+
+/* quoted reply, WeChat style: a compact grey block above the message */
+.chat-quote {
+  background: var(--inset); border-left: 3px solid var(--ink-faint); border-radius: 6px;
+  padding: 7px 11px; margin-bottom: 7px; font-size: .82rem; color: var(--muted);
+  cursor: pointer; transition: background .18s;
+}
+.chat-quote:hover { background: var(--row-hover-2); }
+.chat-quote-author { color: var(--accent, var(--green)); font-weight: 700; display: block; margin-bottom: 1px; }
+.chat-quote-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-msg.mine .chat-quote { border-left-color: color-mix(in srgb, var(--accent, var(--green)) 55%, var(--ink-faint)); }
+
+.chat-msg-actions {
+  display: flex; gap: 2px; opacity: 0; visibility: hidden;
+  align-self: center; transition: opacity .16s;
+}
+.chat-msg:hover .chat-msg-actions { opacity: 1; visibility: visible; }
+.chat-msg-actions .icon-btn { font-size: .82rem; padding: 3px 5px; }
+
+.chat-composer {
+  border-top: 1px solid var(--border); background: var(--bg-2);
+  padding: 10px 18px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.chat-quote-bar {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--inset); border-radius: 8px; padding: 7px 12px; font-size: .82rem;
+}
+.chat-quote-bar[hidden] { display: none; }
+.chat-quote-label { color: var(--accent, var(--green)); font-weight: 700; flex: none; }
+.chat-quote-text {
+  color: var(--muted); flex: 1; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.chat-tools { display: flex; align-items: center; gap: 12px; }
+.chat-tool {
+  background: none; border: 0; font-size: 1.2rem; cursor: pointer;
+  padding: 2px 4px; border-radius: 6px; line-height: 1;
+}
+.chat-tool:hover { background: var(--shade); }
+.chat-hint { color: var(--ink-soft); font-size: .75rem; }
+.chat-emoji-panel {
+  display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px; max-height: 140px; overflow-y: auto;
+}
+.chat-emoji-panel[hidden] { display: none; }
+.chat-emoji {
+  background: none; border: 0; font-size: 1.15rem; cursor: pointer;
+  padding: 5px; border-radius: 6px; line-height: 1;
+}
+.chat-emoji:hover { background: var(--row-hover-2); transform: scale(1.15); }
+#chat-input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); padding: 10px 13px; font-family: var(--font);
+  font-size: .93rem; resize: none; max-height: 140px; line-height: 1.6;
+}
+#chat-input:focus { outline: 1px solid var(--accent, var(--green)); }
+.chat-send-row { display: flex; align-items: center; justify-content: space-between; }
+.chat-counter { color: var(--ink-soft); font-size: .75rem; }
+
+@media (max-width: 860px) {
+  .chat-shell { grid-template-columns: 1fr; }
+  .chat-side { display: none; }
+}
+
+/* =============
+
+/* ================= v13b: repo covers ================= */
+/* Repo cover: a full-bleed banner across the top of the card, with the icon
+   and star badge floated over it. */
+.repo-cover {
+  position: relative; height: 96px; margin: -24px -24px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.repo-cover::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 40%, rgba(14,16,15,.75));
+}
+.repo-card { overflow: hidden; position: relative; }
+.repo-card .repo-cover { height: 74px; margin: -24px -24px 12px; }
+.repo-card .repo-cover .repo-cover-badge {
+  position: absolute; right: 10px; bottom: 8px; z-index: 2;
+  font-size: .74rem; color: #fff; background: rgba(0,0,0,.45);
+  border-radius: 999px; padding: 2px 9px;
+}
+.cover-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.cover-option {
+  border: 2px solid var(--border); border-radius: 10px; cursor: pointer;
+  padding: 0; background: none; overflow: hidden;
+  transition: border-color .2s, transform .2s;
+}
+.cover-option:hover { transform: translateY(-2px); }
+.cover-option.active { border-color: var(--accent, var(--green)); }
+.cover-swatch { width: 100%; height: 54px; }
+.cover-name { font-size: .68rem; color: var(--muted); padding: 4px 0 5px; text-align: center; display: block; }
+
+/* ================= v13b: profile banner + bio ================= */
+.profile-banner { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+
+/* No scrim. Contrast over the banner is handled by flipping the text colour to
+   suit the picture's own brightness (see adaptBannerInk in app.js) rather than
+   by veiling the picture — the upload is the thing the owner chose to show, so
+   washing it out to protect the text gets the priority backwards. */
+
+/* The inner layer is oversized well past the frame so the background can be
+   moved and scaled without its edge coming into view. `inset: -20%` was not
+   enough once blur was added — a blurred edge is visible as a soft smear even
+   when the image still covers, and at the top/bottom ends of the position
+   range the moved layer exposed it. The vertical inset is therefore deeper than
+   the horizontal one: the range that matters most is y, because a wide image
+   almost fills the width already. */
+.profile-banner-inner {
+  position: absolute;
+  left: -30%; right: -30%;
+  top: -70%; bottom: -70%;
+  will-change: transform, filter;
+  /* Sized well past the frame on purpose. background-position percentages
+     resolve against the LEFTOVER image size, so an image at exactly `cover`
+     leaves almost no vertical room and the slider appears to do nothing — the
+     bug that made this feel broken. At 170% the vertical control has ~70% of
+     the layer's height to travel through, which is enough to actually reframe
+     the picture, and the image's own edges stay out of frame at both ends. */
+  background-size: 170%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.repo-hero { position: relative; overflow: hidden; }
+.repo-hero-inner { position: relative; z-index: 1; }
+.profile-bio { color: var(--body-ink); font-size: .93rem; margin: 10px 0 16px; max-width: 620px; line-height: 1.7; white-space: pre-wrap; }
+.bio-edit-btn {
+  background: none; border: 1px dashed var(--border); color: var(--muted);
+  border-radius: 8px; padding: 6px 12px; font-size: .82rem; cursor: pointer; font-family: var(--font);
+}
+.bio-edit-btn:hover { border-color: var(--accent, var(--green)); color: var(--accent, var(--green)); }
+/* The editor takes 80% of its column rather than the full width: the actions
+   row sits inside the same box, so a full-width field pushed the 保存 button
+   out to the card's edge, away from the text it belongs to. */
+.bio-editor { display: flex; flex-direction: column; gap: 9px; margin: 10px 0 16px; width: 80%; max-width: 80%; }
+.activity-right .bio-editor { width: 80%; max-width: 80%; }
+.bio-editor textarea {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); padding: 11px 13px; font-family: var(--font);
+  font-size: .92rem; resize: vertical; line-height: 1.65; width: 100%;
+}
+.bio-editor textarea:focus { outline: 1px solid var(--accent, var(--green)); }
+.bio-editor-actions { display: flex; gap: 9px; justify-content: flex-end; }
+
+/* stats row: single line, numbers vertically centred */
+.profile-stats { display: flex; gap: 36px; flex-wrap: nowrap; align-items: center; margin-top: 30px; }
+.profile-stats .stat, .profile-stats .stat-btn {
+  display: flex; flex-direction: column; justify-content: center;
+  align-items: flex-start; gap: 2px; line-height: 1.15; height: 60px;
+}
+.profile-stats .stat-num { font-size: 1.95rem; font-weight: 900; color: var(--accent, var(--green)); font-variant-numeric: tabular-nums; display: block; }
+.profile-stats .stat-label { color: var(--muted); font-size: .82rem; letter-spacing: .04em; }
+@media (max-width: 900px) { .profile-stats { gap: 20px; } .profile-stats .stat-num { font-size: 1.4rem; } }
+
+/* ---- ink over a custom banner ----
+   Which of these applies is decided by adaptBannerInk(), which measures the
+   banner image under the text and overrides the theme's ink when the picture
+   calls for it: dark picture -> light ink, light picture -> dark ink. The
+   classes are set on the section, so one rule covers the title, the subtitle,
+   the stats and the action buttons without each knowing about banners.
+
+   The accent is deliberately excluded. It is the user's chosen hue and is
+   legible on either kind of picture, so flipping it would be changing a
+   setting rather than fixing contrast — the same reason the theme switch does
+   not touch it. */
+
+/* Light ink, for a dark picture. */
+#profile-custom.banner-ink-light .repo-title,
+#profile-custom.banner-ink-light .repo-sub,
+#profile-custom.banner-ink-light .profile-stats .stat-label,
+#profile-custom.banner-ink-light .owner-tag { color: #fff; }
+#profile-custom.banner-ink-light .stat-btn:hover .stat-label { color: var(--accent, var(--green)); }
+
+/* Dark ink, for a light picture. */
+#profile-custom.banner-ink-dark .repo-title,
+#profile-custom.banner-ink-dark .repo-sub,
+#profile-custom.banner-ink-dark .profile-stats .stat-label,
+#profile-custom.banner-ink-dark .owner-tag { color: #11151a; }
+#profile-custom.banner-ink-dark .stat-btn:hover .stat-label { color: var(--accent, var(--green)); }
+
+/* The outline button's border and label need the same treatment, or it keeps a
+   theme-coloured outline that disappears against the picture. */
+#profile-custom.banner-ink-light .btn-outline { border-color: rgba(255, 255, 255, .55); color: #fff; }
+#profile-custom.banner-ink-light .btn-outline:hover { border-color: #fff; background: rgba(255, 255, 255, .12); }
+#profile-custom.banner-ink-dark .btn-outline { border-color: rgba(17, 21, 26, .5); color: #11151a; }
+#profile-custom.banner-ink-dark .btn-outline:hover { border-color: #11151a; background: rgba(17, 21, 26, .1); }
+
+/* banner controls */
+.banner-controls { display: flex; flex-direction: column; gap: 13px; }
+.banner-row { display: flex; align-items: center; gap: 11px; font-size: .85rem; }
+.banner-row > span:first-child { color: var(--muted); min-width: 52px; }
+.banner-row input[type=range] { flex: 1; accent-color: var(--accent, var(--green)); }
+.banner-val { color: var(--accent, var(--green)); font-weight: 700; min-width: 44px; text-align: right; font-size: .8rem; }
+
+/* The same controls inside the settings drawer need more room than they do on
+   the profile panel. That panel is 620px wide; the drawer's content column is
+   about 336px, and the fixed 52px label + 44px readout left the slider itself
+   only ~200px — every control read as cramped and the values were hard to scan.
+   The label column and the gaps shrink to give the slider back its width, and
+   the rows breathe vertically instead. */
+.settings-drawer .banner-controls { gap: 16px; }
+.settings-drawer .banner-row { gap: 9px; flex-wrap: wrap; row-gap: 6px; }
+.settings-drawer .banner-row > span:first-child { min-width: 0; flex: none; font-size: .8rem; }
+/* The slider takes its own full-width line, with the readout on the right of
+   that line rather than competing with the label for the same row. */
+.settings-drawer .banner-row input[type=range] { flex: 1 1 100%; order: 3; min-width: 0; }
+.settings-drawer .banner-val { min-width: 0; flex: none; margin-left: auto; font-size: .78rem; }
+.settings-drawer .banner-upload { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.settings-drawer .bio-editor-actions { justify-content: flex-start; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+/* `display: inline` on the remove-form is fine in a wide panel, but in the
+   drawer it let the two buttons butt against each other. Block-level here so
+   the flex row's gap applies. */
+.settings-drawer .bio-editor-actions .inline-form { display: block; }
+
+/* ================= v13b: bigger follow modal ================= */
+.follow-panel { width: min(560px, 94vw); max-height: 78vh; }
+.follow-body { padding: 10px; }
+.follow-user { padding: 12px 14px; gap: 13px; align-items: center; }
+.follow-user-link { display: flex; align-items: center; gap: 13px; flex: 1; min-width: 0; color: var(--text); }
+.follow-user .follow-btn-sm { margin-left: auto; }
+.follow-user .avatar, .follow-user .avatar-img { width: 40px; height: 40px; flex: none; }
+/* "正在关注" needs more room than "关注" */
+.follow-user-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.follow-btn-sm {
+  flex: none; border-radius: 999px; padding: 6px 18px; font-size: .82rem; white-space: nowrap;
+  font-weight: 700; cursor: pointer; font-family: var(--font);
+  border: 1px solid var(--accent, var(--green)); background: var(--accent, var(--green));
+  color: var(--on-accent); transition: filter .2s;
+}
+.follow-btn-sm:hover { filter: brightness(.9); }
+.follow-btn-sm.on { background: transparent; color: var(--muted); border-color: var(--border); }
+
+/* ================= v13b: search page hero ================= */
+.search-hero { padding: calc(var(--header-offset) + 50px) 24px 20px; }
+.search-hero-inner { max-width: 720px; margin: 0 auto; text-align: center; }
+.search-big {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+  padding: 8px 8px 8px 22px; margin-top: 24px;
+}
+/* The border lights up where the pointer is, rather than all the way round.
+   Two stacked layers do it: a ::before carrying a radial gradient centred on
+   the pointer (the glow), and a ::after one pixel inside it holding the panel
+   fill — so only the 1px ring between them shows, and the ring is lit near the
+   cursor and dark away from it. --mx / --my are written by initSearchGlow().
+   The mask keeps the glow inside the rounded shape, which a plain border on a
+   999px-radius pill cannot do. */
+.search-big { position: relative; }
+.search-big::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  padding: 1px; pointer-events: none;
+  background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--accent, var(--green)) 85%, transparent), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0; transition: opacity .25s;
+}
+/* Only the class the script adds turns the glow on.
+   A `:hover` selector was listed here alongside it, which defeated the point:
+   hover can become true without the script ever having written a position — a
+   page that focuses the field on load, or a pointer that arrives via a
+   synthetic event, lit the gradient at its 50%/50% default, i.e. dead centre.
+   Routing every reveal through `glow-on` means the light can only appear once
+   --mx/--my have actually been recorded, so it is always where the pointer is.
+   The transition gives it the fade in and out. */
+.search-big.glow-on::before { opacity: 1; }
+/* A soft bloom inside the field, following the same point. */
+.search-big::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--glow) 20%, transparent), transparent 72%);
+  opacity: 0; transition: opacity .25s;
+}
+.search-big.glow-on::after { opacity: 1; }
+.search-big > * { position: relative; z-index: 1; }
+
+.search-big input { flex: 1; background: none; border: 0; outline: 0; color: var(--text); font-family: var(--font); font-size: 1rem; }
+.search-big input::placeholder { color: var(--ink-soft); }
+.search-big .btn { flex: none; }
+
+/* bio line: text and its edit button sit together */
+/* Bio sits above the stats row, right-aligned with it and given room to
+   breathe so longer text does not wrap awkwardly. */
+.bio-line {
+  display: flex; align-items: center; gap: 14px; flex-wrap: nowrap;
+  margin: 18px 0 0; width: fit-content; max-width: 100%;
+  margin-left: auto; justify-content: flex-end;
+}
+.bio-line .profile-bio {
+  flex: 0 1 auto; min-width: 0;
+  text-align: right; margin: 0;
+  max-width: 720px;
+}
+.bio-line .bio-edit-btn { flex: none; }
+.bio-line .profile-bio { margin: 0; }
+.bio-line .bio-edit-btn { margin-top: 2px; }
+.profile-bio[hidden] { display: none; }
+.repo-sub[hidden] { display: none; }
+/* banner button aligns with the stats row */
+.profile-stats .banner-btn { margin-left: auto; align-self: center; flex: none; }
+/* Same green pill as "新建仓库" in the hero above it, one step smaller: the two
+   sit on the same page, so they should read as the same button at two weights
+   rather than as two unrelated controls.
+   Only size and radius are set here. The fill is left to .btn-green so the
+   accent-colour override (body.has-accent .btn-green) still applies — hard-
+   coding a green here would win on specificity and leave the two buttons
+   different colours whenever the user picks an accent. */
+.profile-stats .banner-btn.btn-green {
+  font-weight: 700; padding: 5px 12px; font-size: .78rem;
+  border-radius: 999px; border-color: transparent;
+}
+/* Hidden until the pointer comes near. This is a per-account setup control, not
+   something to read on every visit to someone's profile, so it stays out of the
+   way until it is wanted. `.armed` is set by the magnetic handler when the
+   cursor enters the field the button already defines for its pull — one field,
+   two uses, so what attracts the button is exactly what reveals it. */
+.profile-stats .banner-btn {
+  /* Only opacity animates, and `visibility` is delayed to match.
+     Movement is deliberately NOT attempted: the magnetic pull runs on GSAP,
+     which writes an inline `transform` on this element and also resets the
+     standalone `translate` / `rotate` / `scale` properties to `none` when it
+     initialises. Anything set through those properties is therefore discarded
+     before it can transition — a `translate: 0 8px` here was computed as `none`
+     and animated nothing. Opacity is the one channel GSAP leaves alone, so the
+     entrance is built on it.
+     The visibility delay is what makes the two directions differ:
+       - leaving  (this rule): visibility waits out the fade, then flips. With
+         no delay the element went hidden 19ms in and the fade never ran.
+       - arriving (.armed below): delay 0, so it is visible and clickable from
+         the first frame instead of being unclickable for the whole fade.
+     The delay must equal the fade duration, or it would flip early or late. */
+  opacity: 0; visibility: hidden;
+  transition: opacity .34s cubic-bezier(.22,1,.36,1),
+              visibility 0s linear .34s;
+}
+.profile-stats .banner-btn.armed,
+.profile-stats .banner-btn:focus-visible {
+  opacity: 1; visibility: visible;
+  transition-delay: 0s, 0s;
+}
+/* While the panel is open the button must stay put, or it would vanish the
+   moment the pointer moved down into the panel it just opened. */
+.profile-stats .banner-btn.active {
+  opacity: 1; visibility: visible;
+  transition-delay: 0s, 0s;
+}
+/* Keyboard and touch users never produce a hover, so the button is always
+   shown for them rather than being unreachable. */
+@media (hover: none) {
+  .profile-stats .banner-btn { opacity: 1; visibility: visible; }
+}
+
+/* ================= v14: session resume bar ================= */
+/* Dynamic-Island style pill: springs open at the top centre, holds the
+   destination, then shrinks away. */
+.island {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 99;
+  display: flex; align-items: center; gap: 10px;
+  /* A solid panel, not glass: this sits over a drag operation and has to stay
+     legible against whatever is being dragged. Both the fill and the shadow are
+     variables — a near-black pill with a black shadow reads as a hole punched
+     in a light page. */
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 999px; padding: 0 18px;
+  box-shadow: 0 10px 34px var(--header-shadow);
+  overflow: hidden; white-space: nowrap;
+  font-size: .84rem;
+}
+.island-label { color: var(--accent, var(--green)); font-weight: 700; }
+.island-path { color: var(--muted); }
+
+/* participants counter in the chat header */
+.chat-online {
+  margin-left: auto; color: var(--muted); font-size: .82rem;
+  background: var(--inset); border-radius: 999px; padding: 4px 12px;
+}
+
+/* Modal pages are painted above everything and centred against the viewport,
+   independent of the smooth-scroll transform on their ancestors. */
+.modal-page {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important; left: 0 !important;
+  width: 100vw !important; height: 100vh !important;
+  transform: none !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  z-index: 95;
+}
+.modal-page > .modal-card {
+  transform: none;
+  margin: 0 !important;
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+/* The admin header sits above the content flow; pull the modal layer up by
+   that offset so its centre lands on the true viewport centre. */
+.modal-page { margin-top: 0 !important; }
+
+/* ================= v15: hero cover (square, right aligned) ================= */
+.repo-hero-inner.repo-hero-with-cover {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 28px;
+  align-items: start;
+}
+.repo-hero-content { min-width: 0; }
+.repo-cover-square {
+  width: 240px; height: 240px; flex: none;
+  border-radius: 20px; border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  justify-self: end;
+  /* A framed upload is drawn with a transform (see cover_style), so the box has
+     to clip what the zoom pushes past its edge and the transform has to grow
+     from the middle — otherwise it scales from the top-left corner and every
+     pan drags the picture along with it. */
+  overflow: hidden; transform-origin: center;
+  position: relative;
+  /* The blurred backdrop fills the whole box, as a dedicated layer so the blur
+     does not reach the sharp picture painted over it. `filter: blur()` applies
+     to the element it is set on, so the two cannot share one element. */
+  background-color: var(--bg-2);
+}
+
+/* The blurred backdrop: the picture at `cover` size, softened and dimmed, so the
+   bands a wide photo leaves are its own colours rather than dead strips. */
+.repo-cover-square[style*="--cover-src"]::before,
+.cover-preview-art::before,
+.cover-preview-image::before {
+  content: ""; position: absolute; inset: 0;
+  background-image: var(--cover-src);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(.5) saturate(.9);
+  transform: scale(1.25);
+}
+
+/* The sharp picture, over the backdrop. It is the layer that moves: the framing
+   transform is written here by cover_style() (server) and applyCoverFrame()
+   (client), never on the box, so the backdrop stays put while the picture pans. */
+.repo-cover-square[style*="--cover-src"]::after,
+.cover-preview-art::after,
+.cover-preview-image::after {
+  content: ""; position: absolute; inset: 0;
+  background-image: var(--cover-src);
+  background-position: center;
+  background-repeat: no-repeat;
+  /* `contain` — the whole picture, never cropped. */
+  background-size: contain;
+  transform: inherit;
+  transform-origin: center;
+}
+
+/* ================= v15: two-column repo card ================= */
+/* Horizontal, as designed: cover on the left, text on the right. At four
+   columns a card is ~285px, so the cover steps down from 110px to 84px — that
+   leaves ~180px of text column, enough for a two-line name and the meta row.
+   Stacking the cover on top was tried and rejected: it changes the card's
+   character from a list row into a tile. */
+.repo-card {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 14px;
+}
+.repo-card .repo-cover-square {
+  width: 84px; height: 84px; border-radius: 12px;
+  margin: 0; border: 1px solid var(--border);
+}
+.repo-card-body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.repo-card-body h3 { font-size: .96rem; word-break: break-all; }
+.repo-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.repo-card-head .repo-star { color: #ffcf5c; font-weight: 700; font-size: .78rem; flex: none; }
+.repo-card-icons { display: flex; gap: 8px; align-items: center; font-size: 1.1rem; }
+.repo-card .repo-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: .72rem; }
+.repo-card .repo-desc {
+  font-size: .8rem; color: var(--muted);
+  /* Two lines at most: a long description should not make one card taller than
+     its neighbours and break the row rhythm. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Below three columns the cards get their width back, so the cover can too. */
+@media (max-width: 1080px) {
+  .repo-card { grid-template-columns: 96px minmax(0, 1fr); }
+  .repo-card .repo-cover-square { width: 96px; height: 96px; }
+}
+@media (max-width: 560px) {
+  .repo-card { grid-template-columns: 72px minmax(0, 1fr); }
+  .repo-card .repo-cover-square { width: 72px; height: 72px; }
+  .repo-hero-inner.repo-hero-with-cover { grid-template-columns: 1fr; }
+  .repo-cover-square { width: 150px; height: 150px; justify-self: start; }
+}
+
+/* ================= v16: activity + bio two-column block ================= */
+.activity-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 30px;
+}
+.activity-left { min-width: 0; }
+.activity-right { min-width: 0; }
+.activity-right .side-card { padding: 20px 22px; }
+/* Bio reads left-aligned inside its own column. */
+.activity-right .bio-line {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: 12px; margin: 0; width: 100%; max-width: 100%;
+}
+.activity-right .profile-bio {
+  text-align: left; max-width: 100%; margin: 0;
+  color: var(--body-ink); font-size: .92rem; line-height: 1.75;
+}
+.activity-right .profile-bio:empty { display: none; }
+.activity-right .bio-edit-btn { align-self: flex-start; }
+@media (max-width: 1080px) {
+  .activity-cols { grid-template-columns: 1fr; }
+}
+
+/* ================= v17: repo cover upload ================= */
+.cover-upload {
+  display: flex; flex-direction: column; gap: 9px; align-items: stretch;
+}
+.banner-hint { color: var(--ink-soft); font-size: .76rem; line-height: 1.5; }
+
+/* The cover itself is the upload control: the current cover is shown in a
+   square, and hovering it veils the picture with the action. That replaces a
+   plain green button plus a second "调整封面取景" button — the preview makes it
+   obvious what is being changed and which one to click. */
+.cover-preview {
+  position: relative; display: block; width: 100%; aspect-ratio: 1;
+  padding: 0; cursor: pointer; overflow: hidden;
+  border-radius: 14px; border: 1px solid var(--border);
+  background: var(--bg-2); font-family: var(--font);
+  transition: border-color .2s, transform .2s;
+}
+/* Holds the cover, in the same two-layer form the cards use: ::before is the
+   blurred backdrop filling the box, ::after the sharp picture fitted inside it.
+   No background is set here on purpose — the picture is painted by ::after, and
+   setting it on this element as well would stack a third copy behind them. */
+.cover-preview-art {
+  position: absolute; inset: 0;
+  transition: transform .4s cubic-bezier(.22,1,.36,1);
+}
+.cover-preview:hover .cover-preview-art { transform: scale(1.06); }
+
+/* The veil is always in the DOM so the label does not reflow on hover; only its
+   opacity animates. */
+.cover-preview-veil {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  color: var(--text); font-size: .85rem; font-weight: 600;
+  opacity: 0; transition: opacity .22s;
+}
+.cover-preview-ico { font-size: 1.4rem; }
+.cover-preview:hover .cover-preview-veil,
+.cover-preview:focus-visible .cover-preview-veil { opacity: 1; }
+.cover-preview:focus-visible { outline: 2px solid var(--accent, var(--green)); outline-offset: 2px; }
+
+/* The same border light the cards and the search field use, and the same
+   mechanics: --mx/--my are written by attachFieldGlow, `glow-on` is what
+   reveals it. The ring is masked to the 1px border so the light travels along
+   the edge instead of washing over the picture. */
+.cover-preview::after {
+  content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit;
+  padding: 1px; pointer-events: none;
+  background: radial-gradient(var(--glow-radius, 160px) circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--accent, var(--green)) 85%, transparent), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0; transition: opacity .25s;
+}
+.cover-preview.glow-on::after { opacity: 1; }
+/* The outer bloom, on the wrapper rather than the button: the button clips its
+   own overflow (the picture bleeds to the rounded edge), and a box-shadow is
+   painted outside the border box so it escapes that clip. */
+.cover-preview.glow-on {
+  border-color: var(--border);
+  box-shadow: 0 0 22px 2px color-mix(in srgb, var(--accent, var(--green)) 34%, transparent);
+}
+
+/* A one-line explanation under a settings group heading. */
+.settings-hint { color: var(--muted); font-size: .76rem; line-height: 1.5; margin: -4px 0 10px; }
+.cover-current {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--border); font-size: .82rem;
+}
+.cover-current-label { color: var(--muted); }
+/* Uploaded covers are fitted by the inline style cover_style() writes; this is
+   the fallback for a cover element that carries no inline background at all
+   (a built-in gradient). `contain` for the same reason the inline style uses
+   it: the box is square and an uploaded picture usually is not, so `cover`
+   would silently crop whatever this rule ended up applying to. */
+.repo-cover-square:not([style*="background-image"]) {
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* ---------------- cover presets ----------------
+   A swatch per built-in cover, each showing the gradient it applies. The
+   current one is ringed rather than filled so the swatch itself stays the
+   preview. A form per swatch keeps this working without JavaScript: pressing
+   one is a plain POST. */
+.cover-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 8px; margin-top: 14px;
+}
+.cover-preset-form { display: contents; }
+.cover-preset {
+  aspect-ratio: 1; width: 100%; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 10px;
+  background-size: cover; background-position: center;
+  transition: transform .2s, border-color .2s, box-shadow .2s;
+}
+.cover-preset:hover { transform: translateY(-2px); border-color: var(--ink-faint); }
+.cover-preset.current {
+  border-color: var(--accent, var(--green));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, var(--green)) 35%, transparent);
+}
+
+/* ---------------- cover framing dialog ----------------
+   Wider than the auth dialogs because it holds a preview: the point is to see
+   the crop, and a preview squeezed in beside the controls defeats it. */
+/* Sized past `.modal-card`'s own 460px. That rule sets both `width` and
+   `flex: 0 0 auto`, and in the grid container this dialog lives in the flex
+   basis won — the card came out at 350px and its two-column body collapsed to
+   a 1px preview column. Restating all three here is what actually wins. */
+.auth-card.cover-dialog-card {
+  width: min(780px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  flex: 0 0 auto;
+}
+.cover-dialog-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 26px; align-items: start;
+}
+@media (max-width: 720px) {
+  .cover-dialog-body { grid-template-columns: minmax(0, 1fr); }
+}
+.cover-preview-frame {
+  aspect-ratio: 1; width: 100%; border-radius: 16px;
+  border: 1px solid var(--border); overflow: hidden; background: var(--bg);
+}
+.cover-preview-image {
+  width: 100%; height: 100%;
+  background-repeat: no-repeat; background-position: center;
+  /* `contain`, matching cover_style() on the server: the frame previews the
+     card, so it must crop exactly as much as the card does — which is nothing
+     at 100%. `cover` would fill the square by cutting the photo's long side and
+     the preview would then show a crop the card was no longer making. The
+     framing transform is applied inline by initCoverFraming. */
+  background-size: contain;
+  transform-origin: center;
+}
+.cover-dialog-controls { display: flex; flex-direction: column; gap: 18px; }.cover-dialog-controls .banner-row { flex-wrap: wrap; row-gap: 6px; }
+.cover-dialog-controls .banner-row > span:first-child { min-width: 0; flex: none; }
+.cover-dialog-controls .banner-row input[type=range] { flex: 1 1 100%; order: 3; min-width: 0; }
+.cover-dialog-controls .banner-val { min-width: 0; flex: none; margin-left: auto; }
+.cover-dialog-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+.cover-adjust { margin-top: 12px; }
+
+/* ---- cover crop dialog (opened straight after picking a file) ----
+   The frame is the square that will be stored, and the picture is drawn inside
+   it at `cover` size scaled by the zoom — so the frame shows literally what
+   gets cut. `overflow: hidden` is what makes the frame the crop boundary; the
+   image is positioned by JS and may extend past all four sides. */
+.cover-crop-frame {
+  aspect-ratio: 1; width: 100%; border-radius: 16px;
+  border: 1px solid var(--border); overflow: hidden;
+  position: relative; background: var(--bg); touch-action: none;
+  cursor: grab;
+}
+.cover-crop-frame.is-dragging { cursor: grabbing; }
+.cover-crop-img {
+  position: absolute; top: 0; left: 0;
+  max-width: none; max-height: none;
+  user-select: none; -webkit-user-drag: none;
+}
+.cover-crop-hint { font-size: .78rem; color: var(--muted); margin: 0; line-height: 1.6; }
+
+/* ================= v18: guest avatar + login modal ================= */
+.user-chip-guest {
+  cursor: pointer; font-family: var(--font);
+  border-style: dashed; color: var(--muted);
+}
+.user-chip-guest .avatar { background: var(--shade); color: var(--muted); }
+.user-chip-guest:hover { border-color: var(--accent, var(--green)); color: var(--text); }
+.user-chip-guest:hover .avatar { background: var(--accent, var(--green)); color: var(--on-accent); }
+.guest-label { font-size: .85rem; }
+
+#login-modal { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; }
+.login-modal-card { width: 460px; max-width: calc(100vw - 48px); }
+.login-modal-form { display: flex; flex-direction: column; gap: 16px; }
+.login-modal-form .btn { margin-top: 4px; }
+
+/* bio editor inherits the guest chip's dashed look on the profile page */
+.profile-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* ================= v19: level badge =================
+   Ten levels, each with its own accent. The tint is driven by --lv, set per
+   level below, so the badge reads as a rank at a glance. */
+.level-badge {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 11px 4px 9px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--border);
+  font-size: .78rem; font-weight: 800; letter-spacing: .02em;
+  color: var(--lv, #8b9490);
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1),
+              border-color .22s, box-shadow .22s;
+}
+.level-badge:hover {
+  transform: scale(1.07);
+  border-color: var(--lv, var(--accent, var(--green)));
+  box-shadow: 0 6px 20px rgba(0,0,0,.45);
+}
+.level-tag { flex: none; white-space: nowrap; }
+.level-bar {
+  width: 34px; height: 4px; border-radius: 99px; flex: none;
+  background: var(--shade); overflow: hidden;
+}
+.level-fill {
+  display: block; height: 100%; border-radius: 99px;
+  background: var(--lv, var(--accent, var(--green)));
+  transition: width .5s ease;
+}
+
+/* per-level colours: grey -> green -> teal -> blue -> violet -> gold */
+.level-badge[data-level="1"]  { --lv: #7d8580; }
+.level-badge[data-level="2"]  { --lv: #6fa87f; }
+.level-badge[data-level="3"]  { --lv: #4fc27a; }
+.level-badge[data-level="4"]  { --lv: #0ae448; }
+.level-badge[data-level="5"]  { --lv: #2dd4bf; }
+.level-badge[data-level="6"]  { --lv: #3b9dff; }
+.level-badge[data-level="7"]  { --lv: #6d8cff; }
+.level-badge[data-level="8"]  { --lv: #a78bfa; }
+.level-badge[data-level="9"]  { --lv: #e07bff; }
+.level-badge[data-level="10"] {
+  --lv: #ffc93c;
+  box-shadow: 0 0 14px rgba(255,201,60,.28);
+}
+/* The top level gets a subtle animated sheen to mark it as the ceiling. */
+.level-badge[data-level="10"] .level-tag {
+  background: linear-gradient(90deg, #ffc93c, #fff2b8, #ffc93c);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: lv10-sheen 2.6s linear infinite;
+}
+@keyframes lv10-sheen {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@media (max-width: 860px) {
+  .level-bar { display: none; }
+  .level-badge { padding: 4px 9px; }
+}
+
+/* ================= v20: level panel (profile) ================= */
+/* Kept deliberately short: it is a status strip above the repos, not a feature
+   card, so it should not take a third of the fold. Height comes from tightened
+   padding, a smaller level badge and the scale labels sitting closer to the
+   track — measured at 162px before, 81px now. */
+.level-panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 20px;
+}
+.level-panel-head { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.level-big {
+  font-size: 1.4rem; font-weight: 900; letter-spacing: -.02em;
+  color: var(--accent, var(--green)); flex: none; min-width: 52px;
+}
+.level-panel-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.level-panel-title { font-size: .92rem; font-weight: 700; }
+.level-panel-sub { color: var(--muted); font-size: .76rem; }
+
+.level-track {
+  height: 6px; border-radius: 99px; background: var(--shade);
+  overflow: hidden; margin-bottom: 8px;
+}
+.level-progress {
+  display: block; height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent, var(--green)), #7dffd0);
+  transition: width .6s cubic-bezier(.22,1,.36,1);
+}
+.level-scale { display: flex; justify-content: space-between; gap: 6px; }
+.level-step {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  flex: 1; min-width: 0;
+}
+.level-step-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--shade); border: 1px solid var(--border);
+  transition: background .25s, transform .25s;
+}
+.level-step.reached .level-step-dot {
+  background: var(--accent, var(--green));
+  border-color: var(--accent, var(--green));
+}
+.level-step:hover .level-step-dot { transform: scale(1.35); }
+.level-step-label { color: var(--ink-soft); font-size: .66rem; white-space: nowrap; }
+.level-step.reached .level-step-label { color: var(--muted); }
+
+/* ================= v20: repo title / description editor ================= */
+/* Give the editor trigger its own row with room beneath it, so it does not
+   crowd the action buttons that follow. */
+.repo-edit-row { margin: 12px 0 18px; }
+.repo-actions { margin-top: 4px; }
+.repo-editor {
+  display: flex; flex-direction: column; gap: 14px;
+  margin-top: 14px; max-width: 560px;
+}
+/* display:flex would otherwise defeat the hidden attribute. */
+.repo-editor[hidden] { display: none; }
+.repo-editor .field input, .repo-editor .field textarea {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); padding: 10px 13px; font-family: var(--font);
+  font-size: .93rem; width: 100%;
+}
+.repo-editor .field input:focus, .repo-editor .field textarea:focus {
+  outline: 1px solid var(--accent, var(--green));
+}
+
+/* ================= v20: file tools, aligned with the site style ================= */
+.file-tools { display: flex; align-items: center; gap: 14px; }
+.tool-label {
+  display: flex; align-items: center; gap: 7px;
+  color: var(--muted); font-size: .84rem;
+}
+/* A themed dropdown in place of the native <select>.
+   Matched to .tool-check below — same height, radius, border and padding — so
+   the sort control and the 全选 pill read as one pair rather than a native
+   widget that wandered in. The hidden <select> stays in the DOM as the value
+   store; only the button and the list are visible. */
+.fh-select { position: relative; }
+
+.fh-select-native {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; border: 0; overflow: hidden; clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.fh-select-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 13px; line-height: 1.35;
+  font-family: var(--font); font-size: .84rem; font-weight: 400;
+  cursor: pointer; appearance: none; -webkit-appearance: none;
+  transition: border-color .2s, background-color .2s;
+}
+/* The caret is a pseudo-element rather than a background or a mask: as a child
+   box its colour comes from `color`, so it follows the accent automatically
+   and never fights the button's own background. */
+.fh-select-btn::after {
+  content: ""; flex: none;
+  width: 9px; height: 9px; margin-top: -3px;
+  border-right: 1.7px solid currentColor;
+  border-bottom: 1.7px solid currentColor;
+  transform: rotate(45deg);
+  opacity: .75;
+  transition: transform .22s ease, opacity .2s;
+}
+.fh-select-btn:hover,
+.fh-select.is-open .fh-select-btn {
+  border-color: var(--accent, var(--green));
+  background: color-mix(in srgb, var(--accent, var(--green)) 10%, var(--bg-2));
+}
+.fh-select-btn:hover::after { opacity: 1; }
+.fh-select.is-open .fh-select-btn::after { transform: rotate(225deg); margin-top: 3px; }
+
+/* In the top layer, so the position is against the viewport and set by
+   initFileSortDropdown from the button's rect. `margin: 0` because a popover
+   gets the UA's default `margin: auto`, which would centre it over the page. */
+.fh-select-list {
+  position: fixed; z-index: 40; margin: 0; padding: 6px; list-style: none;
+  min-width: 132px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: var(--shadow-pop);
+}
+/* A popover is display:none while closed via the UA rule; the `hidden`
+   attribute is the fallback for a browser without popover support, so both
+   have to hide it. Declared after the base rule so it wins at equal
+   specificity. */
+.fh-select-list[hidden] { display: none; }
+.fh-select-list li {
+  padding: 7px 12px; border-radius: 9px; cursor: pointer;
+  font-size: .84rem; color: var(--muted); white-space: nowrap;
+  transition: background-color .15s, color .15s;
+}
+.fh-select-list li:hover { background: var(--bg-2); color: var(--text); }
+.fh-select-list li.is-selected {
+  color: var(--accent, var(--green)); font-weight: 600;
+  background: color-mix(in srgb, var(--accent, var(--green)) 10%, transparent);
+}
+.tool-check {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: var(--muted); font-size: .84rem; cursor: pointer;
+  padding: 6px 13px; border: 1px solid var(--border); border-radius: 999px;
+  transition: border-color .2s, color .2s;
+}
+.tool-check:hover { border-color: var(--accent, var(--green)); color: var(--text); }
+.tool-check input { accent-color: var(--accent, var(--green)); cursor: pointer; }
+/* The bulk bar slides in only when something is selected. */
+.bulk-bar { overflow: hidden; }
+
+/* ================= global: honour the hidden attribute =================
+   A component that sets `display: flex/grid` beats the browser's default
+   [hidden] styling, so `hidden` silently stops working. This rule restores
+   it. Elements animated by GSAP are excluded: autoAlpha drives visibility
+   and needs the element to stay in the layout while it fades. */
+[hidden]:not(.gsap-fade) { display: none !important; }
