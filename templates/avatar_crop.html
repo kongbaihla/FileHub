@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>调整头像 · FileHub</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+{# Theme, resolved before the stylesheet is applied. This page does not extend
+   base.html — it is a standalone full-screen cropper — so it has to carry its own
+   copy of the snippet base.html puts in <head>. Without it `data-theme` is never
+   set, the light palette never applies, and a light-theme user gets a dark
+   cropper. Inline and before the stylesheet for the same reason as base.html's:
+   anything later paints the dark palette first and flashes. #}
+<script>
+(function () {
+  try {
+    var c = localStorage.getItem("fh-set-theme") || "system";
+    var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", c === "system" ? (dark ? "dark" : "light") : c);
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
 <link rel="stylesheet" href="/static/css/style.css?v={{ asset_v }}">
 <style>
   body { overflow: hidden; }
@@ -18,7 +35,7 @@
   .cropper-head p { color: var(--muted); font-size: .9rem; }
   .crop-stage {
     position: relative; width: min(560px, 90vw); height: min(400px, 55vh);
-    background: #08090a; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--inset); border: 1px solid var(--border); border-radius: var(--radius);
     overflow: hidden; cursor: grab; touch-action: none; user-select: none;
   }
   .crop-stage.dragging { cursor: grabbing; }
@@ -29,7 +46,7 @@
   .crop-shade { position: absolute; inset: 0; pointer-events: none; }
   .crop-box {
     position: absolute; border: 2px solid var(--green);
-    box-shadow: 0 0 0 9999px rgba(6, 8, 7, .72);
+    box-shadow: 0 0 0 9999px var(--pick-veil);
     cursor: move; box-sizing: border-box;
   }
   .crop-box::before, .crop-box::after {
@@ -57,7 +74,7 @@
     padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: .85rem;
     font-family: var(--font); font-weight: 600;
   }
-  .shape-btn.active { border-color: var(--green); color: var(--green); background: #0ae44812; }
+  .shape-btn.active { border-color: var(--green); color: var(--green); background: color-mix(in srgb, var(--accent, var(--green)) 8%, transparent); }
   .cropper-actions { display: flex; gap: 12px; }
   .crop-preview {
     width: 64px; height: 64px; border-radius: 50%; object-fit: cover;

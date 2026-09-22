@@ -8,61 +8,154 @@
 
 ## 界面
 
-截图统一在 1400×900 视口下截取。
+每个页面并排给出两种主题：**左列深色，右列浅色**。截图统一在 1400×900 视口下截取，
+深浅由站点的主题设置切换（站内「设置 → 外观」），不是另做的一套皮。
 
 ### 浏览
 
-首页的方块场由 canvas 手写针孔投影绘制，随光标起伏：
+<table>
+<tr><th colspan="2">首页</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/home.png" width="470" alt="首页（深色）"></td>
+<td><img src="docs/screenshots/light/home.png" width="470" alt="首页（浅色）"></td>
+</tr>
+</table>
 
-![首页](docs/screenshots/home.png)
+方块场由 canvas 手写针孔投影绘制，随光标起伏。
 
-仓库以网格浏览，可按更新 / 星标 / 体积 / 名称排序：
+<table>
+<tr><th colspan="2">仓库列表</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/repos.png" width="470" alt="仓库列表（深色）"></td>
+<td><img src="docs/screenshots/light/repos.png" width="470" alt="仓库列表（浅色）"></td>
+</tr>
+</table>
 
-![仓库列表](docs/screenshots/repos.png)
+以网格浏览，可按更新 / 星标 / 体积 / 名称排序。
 
-仓库详情：封面、README、带缩略图的文件列表、评论，以及右侧统计面板：
+<table>
+<tr><th colspan="2">仓库详情</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/repo.png" width="470" alt="仓库详情（深色）"></td>
+<td><img src="docs/screenshots/light/repo.png" width="470" alt="仓库详情（浅色）"></td>
+</tr>
+</table>
 
-![仓库详情](docs/screenshots/repo.png)
+封面、README、带缩略图的文件列表、评论，以及右侧统计面板。
 
-用户主页是「左热力图 + 右简介」两列，背景图可调；全部用户按六列网格排列：
+<table>
+<tr><th colspan="2">用户主页</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/profile.png" width="470" alt="用户主页（深色）"></td>
+<td><img src="docs/screenshots/light/profile.png" width="470" alt="用户主页（浅色）"></td>
+</tr>
+</table>
 
-![用户主页](docs/screenshots/profile.png)
+「左热力图 + 右简介」两列，背景图可调。
 
-![全部用户](docs/screenshots/people.png)
+<table>
+<tr><th colspan="2">全部用户</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/people.png" width="470" alt="全部用户（深色）"></td>
+<td><img src="docs/screenshots/light/people.png" width="470" alt="全部用户（浅色）"></td>
+</tr>
+</table>
 
-搜索支持输入即出建议、匹配片段高亮与 ↑↓ 选择；社区是单一公共聊天室：
+按六列网格排列，站长带专属标识。
 
-![搜索](docs/screenshots/search.png)
+<table>
+<tr><th colspan="2">搜索</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/search.png" width="470" alt="搜索（深色）"></td>
+<td><img src="docs/screenshots/light/search.png" width="470" alt="搜索（浅色）"></td>
+</tr>
+</table>
 
-![社区](docs/screenshots/community.png)
+输入即出建议、匹配片段高亮、↑↓ 键选择。
+
+<table>
+<tr><th colspan="2">社区</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/community.png" width="470" alt="社区（深色）"></td>
+<td><img src="docs/screenshots/light/community.png" width="470" alt="社区（浅色）"></td>
+</tr>
+</table>
+
+单一公共聊天室，微信风格：引用回复、表情、日期分隔条。
 
 ### 账号与编辑
 
-登录与注册站内以弹窗呈现，也可直接访问页面：
+<table>
+<tr><th colspan="2">登录</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/login.png" width="470" alt="登录（深色）"></td>
+<td><img src="docs/screenshots/light/login.png" width="470" alt="登录（浅色）"></td>
+</tr>
+</table>
 
-![登录](docs/screenshots/login.png)
+站内以弹窗呈现，也可直接访问页面。
 
-![注册](docs/screenshots/register.png)
+<table>
+<tr><th colspan="2">注册</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/register.png" width="470" alt="注册（深色）"></td>
+<td><img src="docs/screenshots/light/register.png" width="470" alt="注册（浅色）"></td>
+</tr>
+</table>
 
-上传头像后进入裁剪页：拖拽选框、四角缩放、滚轮缩放，右上角实时圆形预览：
+同上，两个页面共用一个弹窗表单。
 
-![头像裁剪](docs/screenshots/avatar-crop.png)
+<table>
+<tr><th colspan="2">头像裁剪</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/avatar-crop.png" width="470" alt="头像裁剪（深色）"></td>
+<td><img src="docs/screenshots/light/avatar-crop.png" width="470" alt="头像裁剪（浅色）"></td>
+</tr>
+</table>
 
-新建仓库与在线编辑 README：
+拖拽选框、四角缩放、滚轮缩放，右上角实时圆形预览。
 
-![新建仓库](docs/screenshots/new-repo.png)
+<table>
+<tr><th colspan="2">新建仓库</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/new-repo.png" width="470" alt="新建仓库（深色）"></td>
+<td><img src="docs/screenshots/light/new-repo.png" width="470" alt="新建仓库（浅色）"></td>
+</tr>
+</table>
 
-![编辑 README](docs/screenshots/readme-edit.png)
+站内以弹窗呈现，与登录同一套弹窗样式。
 
-找不到的页面：
+<table>
+<tr><th colspan="2">在线编辑 README</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/readme-edit.png" width="470" alt="在线编辑 README（深色）"></td>
+<td><img src="docs/screenshots/light/readme-edit.png" width="470" alt="在线编辑 README（浅色）"></td>
+</tr>
+</table>
 
-![404](docs/screenshots/error-404.png)
+直接写 Markdown 并保存，自动创建 README.md。
+
+<table>
+<tr><th colspan="2">404</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/error-404.png" width="470" alt="404（深色）"></td>
+<td><img src="docs/screenshots/light/error-404.png" width="470" alt="404（浅色）"></td>
+</tr>
+</table>
+
+找不到的页面。
 
 ### 站长管理后台
 
-仅站长可开（判定为 `users` 表第一行）。九组计数各画成一根正视 3D 立柱：高度按对数映射，所以 5 条聊天消息和 52269 次下载都能看清；块数只表示量级，精确值仍是旁边的数字。存储健康用立体圆环表示文件构成，底下是磁盘上限。
+<table>
+<tr><th colspan="2">管理后台</th></tr>
+<tr>
+<td><img src="docs/screenshots/dark/admin.png" width="470" alt="管理后台（深色）"></td>
+<td><img src="docs/screenshots/light/admin.png" width="470" alt="管理后台（浅色）"></td>
+</tr>
+</table>
 
-![管理后台](docs/screenshots/admin.png)
+仅站长可开（判定为 `users` 表第一行）。九组计数各画成一根正视 3D 立柱：高度按对数映射，所以 5 条聊天消息和 52269 次下载都能看清；块数只表示量级，精确值仍是旁边的数字。存储健康用立体圆环表示文件构成，底下是磁盘上限。
 
 ---
 
