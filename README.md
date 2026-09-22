@@ -1,6 +1,6 @@
-# FileHub —— 类 GitHub 的自定义文件托管站
+# FileHub —— 自定义文件托管站
 
-上传的不是源码，而是**任意类型的自定义文件**。像 GitHub 一样用「仓库」组织内容，支持星标、评论、搜索、目录层级与下载统计。前端交互动效全部由 **GSAP** 驱动。
+**任意类型的自定义文件**。用「仓库」组织内容，支持星标、评论、搜索、目录层级与下载统计。前端交互动效全部由 **GSAP** 驱动。
 
 ![dark theme](https://img.shields.io/badge/theme-dark%20green-0ae448) ![fastapi](https://img.shields.io/badge/backend-FastAPI-009688) ![gsap](https://img.shields.io/badge/animation-GSAP%203.15-88ce02)
 
