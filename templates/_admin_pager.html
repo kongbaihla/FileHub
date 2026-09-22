@@ -1,0 +1,24 @@
+{# Shared pager for the console's tables. One copy so the three tables cannot
+   drift apart, and so "no more pages" looks the same everywhere. The links come
+   from _pager(), which carries the other tables' search and page state along. #}
+{% if pager.pages > 1 %}
+<div class="admin-pager">
+  {% if pager.prev %}
+  <a class="admin-page-link" href="{{ pager.prev }}" rel="prev">‹ 上一页</a>
+  {% else %}
+  <span class="admin-page-link is-off">‹ 上一页</span>
+  {% endif %}
+  {% for n, url, current in pager.links %}
+    {% if current %}
+    <span class="admin-page-link is-current" aria-current="page">{{ n }}</span>
+    {% else %}
+    <a class="admin-page-link" href="{{ url }}">{{ n }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if pager.next %}
+  <a class="admin-page-link" href="{{ pager.next }}" rel="next">下一页 ›</a>
+  {% else %}
+  <span class="admin-page-link is-off">下一页 ›</span>
+  {% endif %}
+</div>
+{% endif %}

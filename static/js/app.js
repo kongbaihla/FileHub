@@ -1201,6 +1201,25 @@ function initDeleteGuards() {
   }
 }
 
+/* The admin console's destructive forms. Same shape as initDeleteGuards — the
+   submit is intercepted so the page's own confirm dialog is used — but wired
+   from here rather than from setupGeneric(), which runs only in the full-motion
+   branch. A delete button that silently does nothing because the user asked for
+   reduced motion is a broken feature, not a toned-down animation. */
+function initAdminActions() {
+  document.querySelectorAll("form.admin-danger").forEach((form) => {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const ok = await askConfirm(
+        form.dataset.confirmTitle || "确认操作",
+        form.dataset.confirmText || "此操作不可撤销。",
+        form.dataset.confirmOk || "确认删除"
+      );
+      if (ok) HTMLFormElement.prototype.submit.call(form);
+    });
+  });
+}
+
 function initFileMeta() {
   const modal = document.getElementById("meta-modal");
   if (!modal) return;
@@ -2228,7 +2247,7 @@ function destroyPointerEffect() {
    the whole field pop by the same amount whatever its depth.
 
    The faces are drawn as frosted panels rather than solid fills, after the
-   Rhine Lab terminal (github.com/LBEILC/RhineLabUI): a barely-there translucent
+   Rhine Lab terminal (LBEILC/RhineLabUI): a barely-there translucent
    face, a lit band across its upper edge, and one hairline along the top — the
    separation between tiles is the ground showing through the gap, not a drawn
    border. A tile that rises stops being frosted: its faces take the accent and
@@ -2654,6 +2673,446 @@ function initHeroTiles() {
 
 function destroyHeroTiles() {
   if (heroTiles) heroTiles.destroy();
+}
+
+
+/* ================= v16: the console's 3D figures =================
+
+   The admin console prints ten counts and, until now, every one of them was the
+   same weight of text. These draw them instead, working from the same camera
+   the hero's tile field uses (see initHeroTiles): real perspective from a fixed
+   camera rather than a faked skew, and one still frame rather than a loop,
+   because a figure that never moves only costs a draw.
+
+   The shape follows the data:
+
+     * counts become a stack of blocks. They span four orders of magnitude here
+       — 5 chat messages against 52269 downloads — so the number of blocks is
+       log-scaled. A linear stack would draw the first eight as a flat line.
+       How many blocks a value earns is a reading of its magnitude, not a
+       measurement; the number printed under it is the measurement, and the
+       console is read for that. Zero earns no blocks, which is the one thing
+       the shape says unambiguously.
+     * the storage figures become a ring, because they are a partition. The four
+       boxes above it overlap — 被引用 counts the missing file, 磁盘 counts the
+       orphans — so none of them is a share of anything, while 在盘 + 缺失 is.
+
+   Both are driven from the JSON block the page emits, so a bar cannot disagree
+   with the number printed beside it. Colours are read fresh on every paint
+   rather than baked in, which is why a theme or accent change needs a repaint
+   and not the rebuild the hero field requires. */
+
+const CHART_BLOCK_MAX = 12;      // blocks in the tallest stack
+const CHART_CAM_H = 900;         // camera height, world units
+const CHART_STACK_Y = 260;       // how far ahead of the origin a stack stands
+const CHART_STACK_FRAC = 0.62;   // bar width, as a fraction of the canvas
+/* Front view. The camera sits level with the bars rather than looking down on
+   them, which is what makes a stack read as a column instead of a tower seen
+   from above — at the hero field's 60° the top face is a wide diamond and the
+   figure looks like a plan. A little above level is kept so the top bevel is
+   visible at all; dead level would draw a flat rectangle. */
+const CHART_STACK_PITCH = 0.16;
+/* The footprint is a wide shallow panel, not a square. A square turned 45° has
+   as much depth as width, so from the front it would still present a broad top
+   face and undo the front view; this keeps the bevel to a sliver. */
+const CHART_STACK_DEPTH = 0.16;
+const CHART_TOP = 6;             // px of headroom above the tallest stack
+const CHART_BOTTOM = 4;          // px between the footprint and the canvas edge
+/* How long the figures take to grow into place on arrival. Named rather than
+   inline because it is a taste setting, not a computation: the towers read as
+   rising rather than appearing only if this is slow enough to watch. */
+const CHART_GROW_SECONDS = 1.8;
+
+const RING_WEDGES = 72;
+/* A thick band rather than a thin hoop: at this size a narrow ring reads as an
+   outline, and the point of the figure is the colour filling the circle. */
+const RING_INNER = 0.4;          // inner radius, as a fraction of the outer
+const RING_Y = 300;
+const RING_FRAC = 0.7;           // outer diameter, as a fraction of the width
+const RING_RISE = 0.3;           // extrusion, as a fraction of the projected radius
+/* Near top-down, against the hero field's 60°: a circle lying in the horizontal
+   plane projects to an ellipse squashed by sin(pitch), and at 60° that is a flat
+   0.87 that reads as a squashed ring rather than a round one. At this angle the
+   ellipse is 0.98 of its width — round to the eye — and the figure still reads
+   as extruded, because the rise is a screen-space lift: the wall is a band of
+   exactly `rise` pixels whatever the camera angle. */
+const RING_PITCH = 1.35;
+
+/* A perspective camera for one small canvas, fitted to the geometry rather than
+   to fixed pixel offsets, so the figures survive any canvas size the layout
+   hands them. `frac` is the width the shape should span, `depth` how much of
+   that it also reaches into the scene, `top` and `bottom` the margins to keep
+   clear; `room` comes back as the vertical space left above the shape, which is
+   what the caller extrudes into. */
+function chartCamera(W, H, o) {
+  const cosP = Math.cos(o.pitch), sinP = Math.sin(o.pitch);
+  const focal = o.cameraH * sinP;
+  const cam = { cx: W / 2, cy: 0, cameraH: o.cameraH, cosP, sinP, focal };
+
+  function project(wx, wy) {
+    const s = focal / (wy * cosP + cam.cameraH * sinP);
+    return [cam.cx + wx * s, cam.cy - (wy * sinP - cam.cameraH * cosP) * s];
+  }
+
+  const s0 = focal / (o.baseY * cosP + o.cameraH * sinP);
+  cam.half = (o.frac * W) / (2 * s0);
+  cam.halfD = cam.half * (o.depth || 1);
+  cam.baseY = o.baseY;
+  cam.s0 = s0;
+  // Measure the shape's own vertical extent before placing it: with cy at zero
+  // the two extreme points are its near and far edges, and shifting cy so the
+  // near one lands on the bottom margin is what fits the whole figure.
+  const nearY = project(0, o.baseY - cam.halfD)[1];
+  const farY = project(0, o.baseY + cam.halfD)[1];
+  cam.cy = H - o.bottom - nearY;
+  cam.room = Math.max(0, farY + cam.cy - o.top);
+  cam.project = project;
+  return cam;
+}
+
+function chartRGB(css, fallback) {
+  const c = String(css || "").trim();
+  if (c.charAt(0) === "#") {
+    const hex = c.slice(1);
+    const step = hex.length === 3 ? 1 : hex.length >= 6 ? 2 : 0;
+    if (step) {
+      const out = [0, 1, 2].map((i) => {
+        const part = hex.substr(i * step, step);
+        return parseInt(step === 1 ? part + part : part, 16);
+      });
+      if (out.every((v) => v >= 0 && v <= 255)) return out;
+    }
+    return fallback;
+  }
+  const m = c.match(/(\d+)\D+(\d+)\D+(\d+)/);
+  return m ? [+m[1], +m[2], +m[3]] : fallback;
+}
+
+function chartVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return chartRGB(v, fallback);
+}
+
+function chartFill(rgb, alpha) {
+  return "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + alpha + ")";
+}
+
+/* The colours a paint needs, read from the live theme each time so a palette
+   change is picked up without rebuilding anything. */
+function chartInk(theme) {
+  const light = theme === "light";
+  return {
+    accent: chartVar("--accent", [10, 228, 68]),
+    // The frosted neutral the hero field uses for a face at rest, reused here
+    // for the base outline of a zero stack.
+    inert: light ? [58, 66, 60] : [224, 227, 220],
+  };
+}
+
+/* Log-scaled, and deliberately not linear — see the note above. */
+function blocksFor(value, peak) {
+  if (!(value > 0)) return 0;
+  const lo = Math.log10(2);
+  const hi = Math.log10(1 + Math.max(1, peak));
+  if (hi <= lo) return CHART_BLOCK_MAX;
+  const t = (Math.log10(1 + value) - lo) / (hi - lo);
+  return Math.max(1, Math.min(CHART_BLOCK_MAX, Math.round(1 + t * (CHART_BLOCK_MAX - 1))));
+}
+
+function chartQuad(ctx, a, b, c, d) {
+  ctx.beginPath();
+  ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+  ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* Raise every point by `up` screen pixels. The lift is a screen offset rather
+   than a world height for the reason the hero field documents: seen from this
+   far above the plane, a world unit of height is worth a fraction of a pixel,
+   so a real world height would barely move the top face. */
+function chartUp(p, up) {
+  return [p[0], p[1] - up];
+}
+
+function paintStack(s, value, peak, grow, theme) {
+  const ctx = s.ctx;
+  ctx.clearRect(0, 0, s.W, s.H);
+  const cam = chartCamera(s.W, s.H, {
+    pitch: CHART_STACK_PITCH, cameraH: CHART_CAM_H, baseY: CHART_STACK_Y,
+    frac: CHART_STACK_FRAC, depth: CHART_STACK_DEPTH,
+    top: CHART_TOP, bottom: CHART_BOTTOM,
+  });
+  const ink = chartInk(theme);
+  const hw = cam.half, hd = cam.halfD, B = cam.baseY;
+
+  // Head-on, so the bar shows its front face and the bevel along its top edge.
+  // Its two side faces are exactly edge-on from where the camera stands and are
+  // not drawn at all — the same reason a front elevation of a box has two faces
+  // rather than six.
+  const nearL = cam.project(-hw, B - hd);
+  const nearR = cam.project(hw, B - hd);
+  const farL = cam.project(-hw, B + hd);
+  const farR = cam.project(hw, B + hd);
+
+  const blockPx = cam.room / CHART_BLOCK_MAX;
+  const blocks = blocksFor(value, peak);
+  const height = blocks * blockPx * grow;
+
+  if (height <= 0.5) {
+    // Nothing to show, so show nothing — but keep the footprint, which is what
+    // says "this figure was drawn and its value is zero".
+    ctx.strokeStyle = chartFill(ink.inert, 0.3);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(nearL[0], nearL[1]);
+    ctx.lineTo(nearR[0], nearR[1]);
+    ctx.lineTo(farR[0], farR[1]);
+    ctx.lineTo(farL[0], farL[1]);
+    ctx.closePath();
+    ctx.stroke();
+    return;
+  }
+
+  const topNL = chartUp(nearL, height), topNR = chartUp(nearR, height);
+  const topFL = chartUp(farL, height), topFR = chartUp(farR, height);
+
+  ctx.fillStyle = chartFill(ink.accent, 0.34);
+  chartQuad(ctx, nearL, nearR, topNR, topNL);          // front face
+  ctx.fillStyle = chartFill(ink.accent, 0.78);
+  chartQuad(ctx, topNL, topNR, topFR, topFL);          // top bevel
+
+  // Block seams: one line across the face at each boundary the stack has grown
+  // past, which is what makes the column countable rather than a solid slab.
+  ctx.strokeStyle = chartFill(ink.accent, 0.5);
+  ctx.lineWidth = 1;
+  for (let k = 1; k * blockPx < height; k++) {
+    const up = k * blockPx;
+    const a = chartUp(nearL, up), b = chartUp(nearR, up);
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = chartFill(ink.accent, 0.9);
+  ctx.beginPath();
+  ctx.moveTo(topNL[0], topNL[1]);
+  ctx.lineTo(topNR[0], topNR[1]);
+  ctx.lineTo(topFR[0], topFR[1]);
+  ctx.lineTo(topFL[0], topFL[1]);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+/* Split the ring's wedges between categories in proportion, then fix the two
+   things rounding breaks: a category that exists still gets one wedge even if
+   it rounds to none, and the counts are nudged until they close the circle. The
+   first is a deliberate distortion — one bad file in a thousand shows as a
+   visible notch rather than as nothing at all, and the legend beside the ring
+   carries the true figure. */
+function wedgeCounts(values, total) {
+  const sum = values.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return values.map(() => 0);
+  const out = values.map((v) => (v > 0 ? Math.max(1, Math.round((v / sum) * total)) : 0));
+  let diff = total - out.reduce((a, b) => a + b, 0);
+  while (diff !== 0) {
+    const i = out.indexOf(Math.max(...out));
+    if (diff > 0) { out[i] += 1; diff -= 1; }
+    else if (out[i] > 1) { out[i] -= 1; diff += 1; }
+    else break;   // every slice is already a single wedge; the ring stays open
+  }
+  return out;
+}
+
+function paintRing(s, segments, grow, theme) {
+  const ctx = s.ctx;
+  ctx.clearRect(0, 0, s.W, s.H);
+  const cam = chartCamera(s.W, s.H, {
+    pitch: RING_PITCH, cameraH: CHART_CAM_H, baseY: RING_Y,
+    frac: RING_FRAC, top: CHART_TOP, bottom: CHART_BOTTOM,
+  });
+  const ink = chartInk(theme);
+
+  const cols = segments.map((seg) => {
+    if (seg.key === "missing") return chartVar("--danger", [255, 123, 114]);
+    if (seg.key === "orphan") return chartVar("--warn", [255, 176, 32]);
+    return ink.accent;
+  });
+
+  const counts = wedgeCounts(segments.map((seg) => seg.value), RING_WEDGES);
+  const h = cam.half, ri = h * RING_INNER;
+  const rise = Math.min(cam.room, h * cam.s0 * RING_RISE) * grow;
+  if (rise <= 0.5) return;
+
+  // Every wedge, with the angle range it covers, so they can be sorted by depth
+  // before drawing. Far wedges first: the near rim then covers them, which is
+  // what makes the ring read as a solid ring rather than a flat annulus.
+  const wedges = [];
+  let angle = -Math.PI / 2;
+  counts.forEach((n, i) => {
+    const span = TAU * (n / RING_WEDGES);
+    for (let k = 0; k < n; k++) {
+      wedges.push({
+        a0: angle + (k / n) * span,
+        a1: angle + ((k + 1) / n) * span,
+        colour: cols[i],
+        mid: angle + ((k + 0.5) / n) * span,
+      });
+    }
+    angle += span;
+  });
+  wedges.sort((p, q) => Math.sin(q.mid) - Math.sin(p.mid));
+
+  const at = (r, a) => cam.project(r * Math.cos(a), cam.baseY + r * Math.sin(a));
+  // Wedges are widened by a hair so neighbours overlap: abutted exactly, the
+  // antialiased edges of two fills leave a visible seam down every boundary.
+  const OVERLAP = 0.006;
+
+  wedges.forEach((w) => {
+    const a0 = w.a0, a1 = w.a1 + OVERLAP;
+    const i0 = at(ri, a0), o0 = at(h, a0), i1 = at(ri, a1), o1 = at(h, a1);
+    ctx.fillStyle = chartFill(w.colour, 0.34);
+    chartQuad(ctx, o0, o1, chartUp(o1, rise), chartUp(o0, rise));      // outer wall
+    ctx.fillStyle = chartFill(w.colour, 0.2);
+    chartQuad(ctx, i0, i1, chartUp(i1, rise), chartUp(i0, rise));      // inner wall
+    ctx.fillStyle = chartFill(w.colour, 0.82);
+    chartQuad(ctx, chartUp(i0, rise), chartUp(o0, rise),
+              chartUp(o1, rise), chartUp(i1, rise));                   // top face
+  });
+}
+
+function chartSurface(canvas) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  // offsetWidth, not getBoundingClientRect: the latter reports the *transformed*
+  // box, and the smooth-scroll wrapper scales its content, so a measurement
+  // taken during a transition came back half again too large and the backing
+  // store was sized for a box the element does not have.
+  const W = Math.max(1, canvas.offsetWidth);
+  const H = Math.max(1, canvas.offsetHeight);
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  return { canvas, ctx, W, H };
+}
+
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+}
+
+let adminCharts = null;
+
+function initAdminCharts() {
+  destroyAdminCharts();
+  const host = document.getElementById("admin-charts");
+  if (!host) return;                 // not the console
+  let data;
+  try {
+    data = JSON.parse(host.textContent || "{}");
+  } catch (e) {
+    // A malformed payload is not worth a broken page: the numbers printed
+    // beside the canvases are still correct, so the console just goes plain.
+    return;
+  }
+  const bars = data.bars || {};
+  const segments = Array.isArray(data.ring) ? data.ring : [];
+  if (!Object.keys(bars).length && !segments.length) return;
+
+  // One scale across every stack, so the towers compare with each other rather
+  // than each being drawn against its own maximum.
+  const peak = Math.max(1, ...Object.values(bars).map(Number).filter(Number.isFinite));
+
+  let surfaces = [];
+  function prepare() {
+    surfaces = [];
+    document.querySelectorAll("canvas.stat-viz").forEach((canvas) => {
+      const value = Number(bars[canvas.dataset.metric]);
+      if (!Number.isFinite(value)) return;
+      const s = chartSurface(canvas);
+      if (s) surfaces.push({ ...s, kind: "stack", value });
+    });
+    const ring = document.getElementById("health-ring");
+    if (ring && segments.length) {
+      const s = chartSurface(ring);
+      if (s) surfaces.push({ ...s, kind: "ring" });
+    }
+  }
+
+  function paint(grow) {
+    const theme = currentTheme();
+    surfaces.forEach((s) => {
+      if (s.kind === "ring") paintRing(s, segments, grow, theme);
+      else paintStack(s, s.value, peak, grow, theme);
+    });
+  }
+
+  prepare();
+
+  // These figures are still, so the only motion is the one they arrive with.
+  // Under reduced motion — or with interface motion switched off — they are
+  // simply drawn at full height, which is a finished figure rather than a
+  // suppressed animation.
+  const animate = motionPref() &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let grow = animate ? 0 : 1;
+  let tween = null;
+  if (animate) {
+    const proxy = { v: 0 };
+    tween = gsap.to(proxy, {
+      v: 1, duration: CHART_GROW_SECONDS, ease: "power2.out",
+      onUpdate: () => { grow = proxy.v; paint(grow); },
+      onComplete: () => { grow = 1; paint(1); },
+    });
+  } else {
+    paint(1);
+  }
+
+  let queued = 0;
+  const repaint = () => {
+    if (queued) return;
+    queued = requestAnimationFrame(() => {
+      queued = 0;
+      prepare();
+      paint(grow);
+    });
+  };
+
+  // A ResizeObserver rather than a window-resize listener: the canvas box can
+  // change without the window doing anything — the interface-zoom setting
+  // rescales it, and the reveal animation settles it after first paint. The
+  // backing store has to follow the box it is actually displayed in, or the
+  // browser rescales a stale bitmap and the figure goes soft.
+  const ro = typeof ResizeObserver === "function"
+    ? new ResizeObserver(repaint) : null;
+  if (ro) {
+    document.querySelectorAll("canvas.stat-viz, #health-ring").forEach((cv) => ro.observe(cv));
+  } else {
+    window.addEventListener("resize", repaint);
+  }
+
+  // Colours are read at paint time, so the other theme only needs a repaint.
+  // The canvas sizes are in CSS pixels and do not change with the palette.
+  const mo = new MutationObserver(() => paint(grow));
+  mo.observe(document.documentElement, {
+    attributes: true, attributeFilter: ["data-theme", "style"],
+  });
+
+  adminCharts = {
+    destroy() {
+      if (queued) cancelAnimationFrame(queued);
+      if (tween) tween.kill();
+      if (ro) ro.disconnect();
+      else window.removeEventListener("resize", repaint);
+      mo.disconnect();
+      adminCharts = null;
+    },
+  };
+}
+
+function destroyAdminCharts() {
+  if (adminCharts) adminCharts.destroy();
 }
 
 
@@ -4944,6 +5403,8 @@ initModalPages();
 initFollowListButtons();
 initSearchBox();
 initCommentActions();
+initAdminActions();
+initAdminCharts();
 
 build();
 initHeroTiles();

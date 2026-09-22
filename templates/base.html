@@ -92,7 +92,13 @@
         <div class="footer-brand">FILE<span>HUB</span><p>托管你的每一份自定义文件。</p></div>
         <div class="footer-cols">
           <div><h4>站点</h4><a href="/">首页</a><a href="/search">搜索</a><a href="#" data-dialog-open="newrepo">新建仓库</a></div>
-          <div><h4>账号</h4><a href="#" data-dialog-open="login">登录</a><a href="#" data-dialog-open="register">注册</a></div>
+          {# The owner's console lives here rather than in the main nav: it is an
+             administrative errand, not one of the places the site is browsed
+             to, and it keeps the header to the four links everyone uses.
+             Hiding it from non-owners is cosmetic — /admin re-derives the owner
+             on every request and redirects anyone else home, so this is
+             convenience, not the access control. #}
+          <div><h4>账号</h4><a href="#" data-dialog-open="login">登录</a><a href="#" data-dialog-open="register">注册</a>{% if user and user.username == site_owner %}<a href="/admin">管理</a>{% endif %}</div>
           <div><h4>技术</h4><a href="https://gsap.com" target="_blank" rel="noopener">GSAP 动效</a><a href="https://fastapi.tiangolo.com" target="_blank" rel="noopener">FastAPI</a></div>
         </div>
       </div>

@@ -56,6 +56,11 @@
   --glow: color-mix(in srgb, var(--accent, #0ae448) 30%, var(--muted));
   --glow-strong: color-mix(in srgb, var(--accent, #0ae448) 45%, var(--muted));
   --glow-weak: color-mix(in srgb, var(--accent, #0ae448) 18%, var(--muted));
+  /* Semantic colours for the admin console. Declared as variables rather than
+     written inline so the light theme can darken them — a red that reads well
+     on --bg #0e100f is unreadable on #f6f7f6. */
+  --warn: #ffb020;
+  --danger: #ff7b72;
 }
 
 /* ---- light theme ----
@@ -94,6 +99,10 @@
   --header-glass: rgba(255, 255, 255, .72);
   --header-glass-solid: rgba(255, 255, 255, .9);
   --header-shadow: rgba(30, 40, 34, .16);
+
+  /* Same two semantics, darkened for a light background. */
+  --warn: #8a5200;
+  --danger: #c0342b;
 }
 /* Bases for the alpha-composited variants below. Declared as separate custom
    properties because color-mix() cannot be given an alpha in a way every
@@ -2788,3 +2797,207 @@ body.hide-thumbs .row-thumb { display: none; }
    it. Elements animated by GSAP are excluded: autoAlpha drives visibility
    and needs the element to stay in the layout while it fades. */
 [hidden]:not(.gsap-fade) { display: none !important; }
+
+/* ================= admin console =================
+   The console needed tables, and the stylesheet had none — every other page is
+   a card grid or a flex row. Everything here reads the theme variables, so the
+   console follows the light/dark theme and the user's accent colour instead of
+   being a dark patch in a light page. */
+
+.admin-health {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px; background: var(--divider);
+}
+.health-item {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 18px 20px; background: var(--panel);
+}
+.health-num {
+  font-size: 1.75rem; font-weight: 900; line-height: 1.15;
+  color: var(--accent, var(--green)); font-variant-numeric: tabular-nums;
+}
+/* A count that wants attention stops wearing the accent colour. */
+.health-item.is-warn .health-num { color: var(--warn); }
+.health-item.is-bad .health-num { color: var(--danger); }
+.health-label { font-size: .84rem; font-weight: 700; color: var(--text); }
+.health-note { font-size: .78rem; color: var(--meta-ink); }
+
+.admin-note { padding: 16px 20px; border-top: 1px solid var(--divider); }
+.admin-note h3 {
+  font-size: .82rem; font-weight: 700; color: var(--muted);
+  margin-bottom: 10px; letter-spacing: .02em;
+}
+.health-list {
+  list-style: none; display: flex; flex-direction: column; gap: 4px;
+  max-height: 230px; overflow: auto;
+}
+.health-list li {
+  display: flex; justify-content: space-between; gap: 12px;
+  font-size: .8rem; color: var(--meta-ink);
+}
+.health-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--body-ink); word-break: break-all;
+}
+.health-more { margin-top: 8px; font-size: .78rem; color: var(--ink-soft); }
+
+.admin-count { font-size: .84rem; color: var(--meta-ink); }
+
+/* Horizontal scroll rather than wrapping: these columns are positional, and a
+   table whose header wraps stops being scannable. */
+.admin-scroll { overflow-x: auto; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.admin-table th {
+  text-align: left; font-size: .74rem; font-weight: 700; letter-spacing: .04em;
+  color: var(--muted); text-transform: uppercase;
+  padding: 10px 16px; border-bottom: 1px solid var(--divider);
+  white-space: nowrap; background: var(--well);
+}
+.admin-table td {
+  padding: 10px 16px; border-bottom: 1px solid var(--divider);
+  color: var(--text); vertical-align: middle;
+}
+.admin-table tbody tr:last-child td { border-bottom: 0; }
+.admin-table tbody tr:hover { background: var(--row-hover); }
+.admin-dim { color: var(--meta-ink); font-variant-numeric: tabular-nums; }
+.admin-body {
+  max-width: 420px; color: var(--body-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.admin-user, .admin-repo {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--text); text-decoration: none; font-weight: 600;
+}
+.admin-user:hover, .admin-repo:hover { color: var(--accent, var(--green)); }
+.admin-actions { text-align: right; white-space: nowrap; }
+.admin-actions .btn { padding: 5px 12px; font-size: .78rem; }
+
+/* The orphan-clean button is disabled when there is nothing to clean, and a
+   disabled button that still looks live invites a pointless click. */
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* The console puts nine figures on one row where the rest of the site has four
+   or six. Wrapping is a safety net rather than the intent: it only engages when
+   the viewport is too narrow for the row, where the alternative is overflow. */
+.repo-stats { flex-wrap: wrap; }
+
+/* Console table tools: the search field and the pager. The search pill mirrors
+   the header's, so a control that does the same job looks the same. */
+.admin-head-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.admin-search {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px 4px 3px 12px;
+  transition: border-color .2s, box-shadow .3s;
+}
+.admin-search:hover, .admin-search:focus-within {
+  border-color: var(--accent, var(--green));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 20%, transparent);
+}
+.admin-search input {
+  background: none; border: 0; outline: 0; color: var(--text);
+  font-size: .82rem; font-family: var(--font); width: 150px;
+}
+.admin-search input::placeholder { color: var(--ink-soft); }
+.admin-search button {
+  background: var(--accent, var(--green)); border: 0; border-radius: 999px;
+  color: var(--on-accent); font-size: .74rem; font-weight: 700;
+  padding: 4px 12px; cursor: pointer; flex: none; font-family: var(--font);
+}
+
+.admin-pager {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 12px 20px; border-top: 1px solid var(--divider);
+}
+.admin-page-link {
+  min-width: 30px; text-align: center; text-decoration: none;
+  padding: 5px 10px; border-radius: 8px;
+  border: 1px solid var(--border); color: var(--muted);
+  font-size: .8rem; font-weight: 600;
+  transition: border-color .18s, color .18s, background-color .18s;
+}
+a.admin-page-link:hover { border-color: var(--accent, var(--green)); color: var(--text); }
+.admin-page-link.is-current {
+  border-color: var(--accent, var(--green)); color: var(--accent, var(--green));
+  background: color-mix(in srgb, var(--accent, var(--green)) 10%, transparent);
+}
+/* The disabled ends stay in place rather than disappearing, so the pager does
+   not change width as you page through it. */
+.admin-page-link.is-off { opacity: .35; }
+
+/* A table with no matching rows says so in place, instead of collapsing to a
+   bare header. */
+.admin-table td.admin-empty {
+  text-align: center; color: var(--ink-soft);
+  font-size: .86rem; padding: 34px 16px;
+}
+
+/* The console draws each count as a small extruded tower: the number below it is
+   the reading, the tower is the magnitude. The width is fixed rather than 100%
+   because the renderer fits its geometry to whatever box this gives it, and a
+   percentage inside a content-sized flex column has nothing to resolve against. */
+.stat-viz {
+  display: block; align-self: center;
+  width: 64px; height: 110px; margin-bottom: 10px;
+}
+
+/* Composition of the storage partition, beside the four figures it summarises. */
+.admin-ring-band {
+  display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+  padding: 16px 20px; border-top: 1px solid var(--divider);
+}
+#health-ring { width: 168px; height: 148px; flex: none; }
+.ring-legend { min-width: 210px; flex: 1 1 auto; }
+.ring-legend h3 {
+  font-size: .82rem; font-weight: 700; color: var(--muted);
+  margin-bottom: 10px; letter-spacing: .02em;
+}
+.ring-legend ul { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.ring-legend li {
+  display: flex; align-items: center; gap: 8px;
+  font-size: .84rem; color: var(--text);
+}
+.ring-legend li strong {
+  margin-left: auto; font-variant-numeric: tabular-nums; color: var(--meta-ink);
+}
+.ring-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+/* The swatches have to match the ring's own segments, which are drawn from the
+   same three variables. */
+.ring-ok .ring-dot { background: var(--accent, var(--green)); }
+.ring-missing .ring-dot { background: var(--danger); }
+.ring-orphan .ring-dot { background: var(--warn); }
+.ring-note { margin-top: 10px; font-size: .76rem; color: var(--ink-soft); }
+
+/* The account column reads as a stack of identities rather than a list of names,
+   so what is in it sits centred; every other column stays left-aligned, where
+   the numbers and paths line up. */
+.admin-table th.admin-center,
+.admin-table td.admin-center { text-align: center; }
+
+/* How full the quota is. A bar, because "how full" is a proportion and reading
+   it off two numbers is work. */
+.quota-bar {
+  height: 8px; border-radius: 999px; overflow: hidden;
+  background: var(--well); border: 1px solid var(--divider);
+  margin-bottom: 14px;
+}
+.quota-fill {
+  display: block; height: 100%; min-width: 2px;
+  background: var(--accent, var(--green));
+}
+.quota-form {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: .84rem; color: var(--muted);
+}
+.quota-form input[type="number"] {
+  width: 96px; padding: 5px 10px; font-family: var(--font); font-size: .84rem;
+  color: var(--text); background: var(--well);
+  border: 1px solid var(--border); border-radius: 8px; outline: 0;
+}
+.quota-form input[type="number"]:focus { border-color: var(--accent, var(--green)); }
+.quota-form select {
+  padding: 5px 8px; font-family: var(--font); font-size: .84rem;
+  color: var(--text); background: var(--well);
+  border: 1px solid var(--border); border-radius: 8px; outline: 0; cursor: pointer;
+}
+.quota-hint { font-size: .76rem; color: var(--ink-soft); }

@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block page %}admin{% endblock %}
+{% block title %}管理后台{% endblock %}
+{% block content %}
+<section class="repo-hero">
+  <div class="repo-hero-inner">
+    <h1 class="repo-title split-hero-sm">管理后台</h1>
+    <p class="repo-sub">站点概览、存储健康与内容管理 · 仅站长可见</p>
+    {# One row. 占用空间 is not here: it is a size, and its ceiling lives in the
+       storage panel below where it can be read against the bar — as a bare
+       number beside eight counts it said nothing a bar could show. #}
+    <div class="repo-stats">
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="users" aria-hidden="true"></canvas><span class="stat-num">{{ totals.users }}</span><span class="stat-label">用户</span></div>
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="repos" aria-hidden="true"></canvas><span class="stat-num">{{ totals.repos }}</span><span class="stat-label">仓库</span></div>
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="files" aria-hidden="true"></canvas><span class="stat-num">{{ totals.files }}</span><span class="stat-label">文件</span></div>
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="follows" aria-hidden="true"></canvas><span class="stat-num">{{ totals.follows }}</span><span class="stat-label">关注</span></div>
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="stars" aria-hidden="true"></canvas><span class="stat-num">{{ totals.stars }}</span><span class="stat-label">星标</span></div>
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="comments" aria-hidden="true"></canvas><span class="stat-num">{{ totals.comments }}</span><span class="stat-label">评论</span></div>
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="chat" aria-hidden="true"></canvas><span class="stat-num">{{ totals.chat }}</span><span class="stat-label">聊天消息</span></div>
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="downloads" aria-hidden="true"></canvas><span class="stat-num">{{ totals.downloads }}</span><span class="stat-label">下载总数</span></div>
+      <div class="stat js-reveal"><canvas class="stat-viz" data-metric="private_repos" aria-hidden="true"></canvas><span class="stat-num">{{ totals.repos_private }}</span><span class="stat-label">私有仓库</span></div>
+    </div>
+  </div>
+</section>
+
+{# The figures the canvases draw, shipped as data rather than baked into markup:
+   a chart looks its value up by key, so a bar can never disagree with the count
+   printed beside it. tojson escapes the angle brackets, so this is safe to
+   inline. #}
+<script type="application/json" id="admin-charts">{{ charts|tojson }}</script>
+
+{% if msg %}<div class="flash-msg" data-msg="{{ msg }}">{{ msg }}</div>{% endif %}
+
+<section class="repos">
+  <div class="repos-inner">
+
+    {# Storage health. Counts first, details only when there is something to
+       show — a clean site should read as one line, not an empty table. #}
+    <div class="file-browser js-card">
+      <div class="file-browser-head">
+        <h2>存储健康</h2>
+        <form method="post" action="/admin/orphans/clean" class="inline-form admin-danger"
+              data-confirm-title="清理孤立文件"
+              data-confirm-text="将删除 uploads 目录中 {{ health.orphan_count }} 个没有被任何记录引用的文件，共 {{ health.orphan_bytes|size }}。被数据库引用的文件不会受影响。"
+              data-confirm-ok="确认清理">
+          <button type="submit" class="btn btn-ghost btn-sm danger-btn"
+                  {% if not health.orphan_count %}disabled{% endif %}>清理孤立文件</button>
+        </form>
+      </div>
+      <div class="admin-health">
+        <div class="health-item">
+          <span class="health-num">{{ health.disk_count }}</span>
+          <span class="health-label">磁盘文件</span>
+          <span class="health-note">{{ health.disk_bytes|size }}</span>
+        </div>
+        <div class="health-item {% if health.orphan_count %}is-warn{% endif %}">
+          <span class="health-num">{{ health.orphan_count }}</span>
+          <span class="health-label">孤立文件</span>
+          <span class="health-note">{{ health.orphan_bytes|size }} 无人引用</span>
+        </div>
+        <div class="health-item {% if health.missing_count %}is-bad{% endif %}">
+          <span class="health-num">{{ health.missing_count }}</span>
+          <span class="health-label">缺失文件</span>
+          <span class="health-note">记录在，文件不在</span>
+        </div>
+        <div class="health-item">
+          <span class="health-num">{{ health.referenced_count }}</span>
+          <span class="health-label">被引用</span>
+          <span class="health-note">数据库中的文件名</span>
+        </div>
+      </div>
+
+      {# The four figures above overlap, so they cannot be shown as shares of a
+         whole: 被引用 includes the missing one, and 磁盘 includes the orphans.
+         The ring plots the partition instead — every known file is on disk and
+         referenced, referenced but gone, or on disk and referenced by nothing —
+         which is why its total matches 被引用 rather than 磁盘. #}
+      <div class="admin-ring-band">
+        <canvas id="health-ring" aria-hidden="true"></canvas>
+        <div class="ring-legend">
+          <h3>文件构成 · 共 {{ health.referenced_count }} 个被引用的文件名</h3>
+          <ul>
+            <li class="ring-ok"><span class="ring-dot"></span>正常在盘<strong>{{ health.healthy_count }}</strong></li>
+            <li class="ring-missing"><span class="ring-dot"></span>缺失<strong>{{ health.missing_count }}</strong></li>
+            <li class="ring-orphan"><span class="ring-dot"></span>孤立<strong>{{ health.orphan_count }}</strong></li>
+          </ul>
+          <p class="ring-note">前两项之和等于被引用数；孤立文件不计入其中。</p>
+        </div>
+      </div>
+
+      {% if health.missing %}
+      <div class="admin-note">
+        <h3>缺失文件 · 下载会 404，需要重新上传</h3>
+        <ul class="health-list">
+          {% for name in health.missing %}<li><code>{{ name }}</code></li>{% endfor %}
+        </ul>
+        {% if health.missing_count > health.missing|length %}
+        <p class="health-more">另有 {{ health.missing_count - health.missing|length }} 个未列出</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if health.orphans %}
+      <div class="admin-note">
+        <h3>孤立文件 · 按体积排序，最多列出 20 个</h3>
+        <ul class="health-list">
+          {% for name, size in health.orphans %}
+          <li><code>{{ name }}</code><span>{{ size|size }}</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {# The ceiling the upload path enforces. Its numerator is the directory's
+         real size, not the sum of the file rows, because that is the figure an
+         upload is measured against. #}
+      <div class="admin-note">
+        <h3>磁盘上限 · 被占用 {{ used_bytes|size }} / {{ quota|size }}</h3>
+        <div class="quota-bar" role="img"
+             aria-label="已用 {{ used_pct }}%">
+          <span class="quota-fill" style="width: {{ used_pct if used_pct < 100 else 100 }}%"></span>
+        </div>
+        <form method="post" action="/admin/quota" class="quota-form">
+          <label for="quota-value">新上限</label>
+          <input type="number" id="quota-value" name="value" min="0.1" step="any"
+                 value="{{ quota_value }}" required>
+          <select name="unit" aria-label="单位">
+            {% for u in units %}
+            <option value="{{ u }}"{% if u == quota_unit %} selected{% endif %}>{{ u }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-green btn-sm">保存上限</button>
+          <span class="quota-hint">超出后上传会被拒绝</span>
+        </form>
+      </div>
+    </div>
+
+    {# ---- users ----
+       Each table searches and pages on its own. The hidden fields restate the
+       other two tables' state so searching one does not reset the others. #}
+    <div class="file-browser js-card">
+      <div class="file-browser-head">
+        <h2>用户</h2>
+        <div class="admin-head-tools">
+          <form class="admin-search" method="get" action="/admin">
+            <input type="hidden" name="repo_q" value="{{ repo_list.q }}">
+            <input type="hidden" name="comment_q" value="{{ comment_list.q }}">
+            {% if repo_list.pager.page > 1 %}<input type="hidden" name="repo_page" value="{{ repo_list.pager.page }}">{% endif %}
+            {% if comment_list.pager.page > 1 %}<input type="hidden" name="comment_page" value="{{ comment_list.pager.page }}">{% endif %}
+            <input type="search" name="user_q" value="{{ user_list.q }}" placeholder="用户名或 ID" aria-label="搜索用户">
+            <button type="submit">搜索</button>
+          </form>
+          <span class="admin-count">
+            {% if user_list.q %}匹配 {{ user_list.pager.total }} / {{ totals.users }}{% else %}{{ totals.users }}{% endif %} 个账号
+          </span>
+        </div>
+      </div>
+      <div class="admin-scroll">
+        <table class="admin-table">
+          <thead>
+            <tr><th>ID</th><th class="admin-center">账号</th><th>仓库</th><th>文件</th><th>加入</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for u in user_list.rows %}
+            <tr>
+              <td class="admin-dim">{{ u.id }}</td>
+              <td class="admin-center">
+                <a href="/u/{{ u.username }}" class="admin-user">
+                  {% if u.avatar %}
+                  <img class="avatar-img" src="{{ avatar_url(u.avatar) }}" alt="">
+                  {% else %}
+                  <span class="avatar">{{ u.username[:1]|upper }}</span>
+                  {% endif %}
+                  {{ u.username }}
+                </a>
+                {% if u.username == site_owner %}<span class="owner-tag">站长</span>{% endif %}
+              </td>
+              <td>{{ u.repo_count }}</td>
+              <td>{{ u.file_count }}</td>
+              <td class="admin-dim">{{ u.created_at|reltime }}</td>
+              <td class="admin-actions">
+                {% if u.username == site_owner %}
+                {# The account that defines the console cannot delete itself. #}
+                <span class="admin-dim">—</span>
+                {% else %}
+                <form method="post" action="/admin/user/{{ u.username|urlencode }}/delete"
+                      class="inline-form admin-danger"
+                      data-confirm-title="删除用户 {{ u.username }}"
+                      data-confirm-text="将永久删除该账号及其 {{ u.repo_count }} 个仓库、{{ u.file_count }} 个文件，连同其评论、星标、关注关系和磁盘上的文件。此操作不可撤销。">
+                  <button type="submit" class="btn btn-ghost btn-sm danger-btn">删除</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="admin-empty">
+              {% if user_list.q %}没有匹配「{{ user_list.q }}」的账号{% else %}还没有任何账号{% endif %}
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% set pager = user_list.pager %}{% include "_admin_pager.html" %}
+    </div>
+
+    {# ---- repos ---- #}
+    <div class="file-browser js-card">
+      <div class="file-browser-head">
+        <h2>仓库</h2>
+        <div class="admin-head-tools">
+          <form class="admin-search" method="get" action="/admin">
+            <input type="hidden" name="user_q" value="{{ user_list.q }}">
+            <input type="hidden" name="comment_q" value="{{ comment_list.q }}">
+            {% if user_list.pager.page > 1 %}<input type="hidden" name="user_page" value="{{ user_list.pager.page }}">{% endif %}
+            {% if comment_list.pager.page > 1 %}<input type="hidden" name="comment_page" value="{{ comment_list.pager.page }}">{% endif %}
+            <input type="search" name="repo_q" value="{{ repo_list.q }}" placeholder="仓库名或所有者" aria-label="搜索仓库">
+            <button type="submit">搜索</button>
+          </form>
+          <span class="admin-count">
+            {% if repo_list.q %}匹配 {{ repo_list.pager.total }} / {{ totals.repos }}{% else %}{{ totals.repos }}{% endif %} 个仓库
+          </span>
+        </div>
+      </div>
+      <div class="admin-scroll">
+        <table class="admin-table">
+          <thead>
+            <tr><th>名称</th><th>文件</th><th>大小</th><th>星标</th><th>创建</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for r in repo_list.rows %}
+            <tr>
+              <td>
+                <a href="/r/{{ r.username }}/{{ r.name }}" class="admin-repo">
+                  <span class="admin-dim">{{ r.username }} /</span> {{ r.name }}
+                </a>
+                {% if r.is_private %}<span class="tag">私有</span>{% endif %}
+              </td>
+              <td>{{ r.file_count }}</td>
+              <td class="admin-dim">{{ r.total_size|size }}</td>
+              <td>{{ r.star_count }}</td>
+              <td class="admin-dim">{{ r.created_at|reltime }}</td>
+              <td class="admin-actions">
+                <form method="post" action="/admin/repo/{{ r.id }}/delete"
+                      class="inline-form admin-danger"
+                      data-confirm-title="删除仓库 {{ r.username }}/{{ r.name }}"
+                      data-confirm-text="将永久删除该仓库的 {{ r.file_count }} 个文件（{{ r.total_size|size }}），连同其评论与星标，磁盘上的文件一并删除。此操作不可撤销。">
+                  <button type="submit" class="btn btn-ghost btn-sm danger-btn">删除</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="admin-empty">
+              {% if repo_list.q %}没有匹配「{{ repo_list.q }}」的仓库{% else %}还没有任何仓库{% endif %}
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% set pager = repo_list.pager %}{% include "_admin_pager.html" %}
+    </div>
+
+    {# ---- comments ---- #}
+    <div class="file-browser js-card">
+      <div class="file-browser-head">
+        <h2>评论</h2>
+        <div class="admin-head-tools">
+          <form class="admin-search" method="get" action="/admin">
+            <input type="hidden" name="user_q" value="{{ user_list.q }}">
+            <input type="hidden" name="repo_q" value="{{ repo_list.q }}">
+            {% if user_list.pager.page > 1 %}<input type="hidden" name="user_page" value="{{ user_list.pager.page }}">{% endif %}
+            {% if repo_list.pager.page > 1 %}<input type="hidden" name="repo_page" value="{{ repo_list.pager.page }}">{% endif %}
+            <input type="search" name="comment_q" value="{{ comment_list.q }}" placeholder="内容或发言人" aria-label="搜索评论">
+            <button type="submit">搜索</button>
+          </form>
+          <span class="admin-count">
+            {% if comment_list.q %}匹配 {{ comment_list.pager.total }} / {{ totals.comments }}{% else %}{{ totals.comments }}{% endif %} 条 · 聊天室 {{ totals.chat }} 条
+          </span>
+        </div>
+      </div>
+      <div class="admin-scroll">
+        <table class="admin-table">
+          <thead>
+            <tr><th>位置</th><th>用户</th><th>内容</th><th>时间</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for cm in comment_list.rows %}
+            <tr>
+              <td class="admin-dim">
+                {% if cm.repo_id == 0 %}
+                聊天室
+                {% elif cm.repo_name %}
+                {{ cm.repo_owner }} / {{ cm.repo_name }}
+                {% else %}
+                #{{ cm.repo_id }}
+                {% endif %}
+              </td>
+              <td><a href="/u/{{ cm.username }}" class="admin-user">{{ cm.username }}</a></td>
+              <td class="admin-body">{{ cm.body }}</td>
+              <td class="admin-dim">{{ cm.created_at|reltime }}</td>
+              <td class="admin-actions">
+                <form method="post" action="/admin/comment/{{ cm.id }}/delete"
+                      class="inline-form admin-danger"
+                      data-confirm-title="删除评论"
+                      data-confirm-text="将永久删除 {{ cm.username }} 的这条评论。引用它的回复会保留，但引用指向会被清除。">
+                  <button type="submit" class="btn btn-ghost btn-sm danger-btn">删除</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="admin-empty">
+              {% if comment_list.q %}没有匹配「{{ comment_list.q }}」的评论{% else %}还没有任何评论{% endif %}
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% set pager = comment_list.pager %}{% include "_admin_pager.html" %}
+    </div>
+
+  </div>
+</section>
+{% endblock %}

@@ -1,4 +1,4 @@
-"""FileHub — a GitHub-like site for hosting arbitrary user files.
+"""FileHub — a site for hosting arbitrary user files.
 
 FastAPI + SQLite, server-rendered Jinja2 templates, files stored on disk.
 """
@@ -22,6 +22,7 @@ import zipfile
 import contextlib
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -42,6 +43,9 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 DB_PATH = DATA_DIR / "filehub.db"
 MAX_FILE_SIZE = 200 * 1024 * 1024  # 200 MB per file
+# The ceiling on everything in uploads/, until the owner changes it from the
+# console. Expressed in bytes; the form offers MB/GB/TB.
+DEFAULT_DISK_QUOTA = 1024 ** 4     # 1 TB
 MAX_COVER_SIZE = 10 * 1024 * 1024   # 10 MB per cover / banner image
 COVER_SIZE = 720                    # stored cover is 720x720 (3x the 240px hero)
 
@@ -160,6 +164,13 @@ CREATE TABLE IF NOT EXISTS folder_names (
     path TEXT NOT NULL,
     display_name TEXT NOT NULL,
     PRIMARY KEY (repo_id, path)
+);
+-- Owner-editable scalars. A table rather than a config file or an environment
+-- variable because the value has to change from the console and take effect
+-- without a restart, and this is already where the site's state lives.
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 """
 
@@ -401,6 +412,72 @@ def rel_time(ts: int) -> str:
 
 templates.env.filters["size"] = fmt_size
 templates.env.filters["reltime"] = rel_time
+
+
+# ---------------------------------------------------------------- settings
+#
+# One key/value table for the few scalars the owner can change. Read through
+# these helpers rather than off the table directly, so a missing row or a value
+# that has been edited into nonsense falls back to the default instead of
+# taking the page — or an upload — down with it.
+
+
+def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        """INSERT INTO settings (key, value) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+        (key, value),
+    )
+
+
+def disk_quota(conn: sqlite3.Connection) -> int:
+    """The storage ceiling in bytes, or the default when unset or unusable."""
+    try:
+        n = int(get_setting(conn, "disk_quota"))
+    except (TypeError, ValueError):
+        return DEFAULT_DISK_QUOTA
+    return n if n > 0 else DEFAULT_DISK_QUOTA
+
+
+def uploads_bytes() -> int:
+    """Bytes actually held in uploads/, which is what a disk ceiling limits.
+
+    Scanned rather than summed from `files.size`: the directory also holds
+    thumbnails, avatars, covers, banners and any orphans, and those take up the
+    same disk. The console shows this same figure against the quota, so what the
+    owner reads and what an upload is refused by cannot drift apart.
+    """
+    total = 0
+    with os.scandir(UPLOAD_DIR) as it:
+        for entry in it:
+            try:
+                if entry.is_file():
+                    total += entry.stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+QUOTA_UNITS = {"MB": 1024 ** 2, "GB": 1024 ** 3, "TB": 1024 ** 4}
+
+
+def quota_form_value(quota: int) -> tuple[float, str]:
+    """The quota as the largest unit that keeps the number readable.
+
+    Editing "1" beside a TB selector is a kinder form than editing
+    1099511627776, and this is the one place the stored bytes are turned back
+    into something a person wrote.
+    """
+    for unit in ("TB", "GB", "MB"):
+        size = QUOTA_UNITS[unit]
+        if quota >= size and quota % size == 0:
+            return quota // size, unit
+    return round(quota / QUOTA_UNITS["MB"], 2), "MB"
 
 
 def render(request: Request, name: str, ctx: dict, status_code: int = 200):
@@ -1224,7 +1301,7 @@ def profile(request: Request, username: str, msg: str = ""):
         day = time.strftime("%Y-%m-%d", time.gmtime(r["created_at"]))
         counts[day] = counts.get(day, 0) + 1
 
-    # Build the trailing ~26 weeks grid, Sunday-aligned, GitHub style.
+    # Build the trailing ~26 weeks grid, Sunday-aligned like a contribution graph.
     today = datetime.date.today()
     start = today - datetime.timedelta(days=364)
     start -= datetime.timedelta(days=(start.weekday() + 1) % 7)  # back to Sunday
@@ -1784,10 +1861,17 @@ async def upload(
         return RedirectResponse("/login", status_code=303)
     with db() as c:
         repo = get_repo_or_404(c, owner, repo_name)
+        quota = disk_quota(c)
     if repo["owner_id"] != me["id"]:
         raise HTTPException(403, "只有仓库所有者可以上传")
 
+    # Read the ceiling once for the whole request, then carry the running total
+    # as files are accepted. Rescanning per file would let one request walk past
+    # the limit with a batch of files that are each individually small enough.
+    used = uploads_bytes()
     saved = 0
+    refused = ""
+
     for uf in files:
         rel = sanitize_relpath(uf.filename or "unnamed")
         stored_name = uuid.uuid4().hex
@@ -1798,8 +1882,19 @@ async def upload(
                 while chunk := await uf.read(1024 * 1024):
                     size += len(chunk)
                     if size > MAX_FILE_SIZE:
-                        raise ValueError("文件超过 200 MB 限制")
+                        raise ValueError("单个文件超过 200 MB 限制")
+                    if used + size > quota:
+                        raise ValueError(
+                            f"磁盘已达上限 {fmt_size(quota)}，请先清理空间或调高上限"
+                        )
                     out.write(chunk)
+        except ValueError as exc:
+            # A refusal is an ordinary outcome, not a fault — the partial write
+            # is dropped and the reason is handed back through the page's own
+            # message channel rather than as a bare error response.
+            dest.unlink(missing_ok=True)
+            refused = str(exc)
+            break
         except Exception:
             dest.unlink(missing_ok=True)
             raise
@@ -1823,6 +1918,10 @@ async def upload(
                 if old["thumb"]:
                     (UPLOAD_DIR / old["thumb"]).unlink(missing_ok=True)
                 c.execute("DELETE FROM files WHERE id = ?", (old["id"],))
+                # Replacing frees the bytes it held. Its thumbnail's bytes are
+                # not credited back (they are not recorded anywhere), which
+                # makes the running total slightly conservative.
+                used -= old["size"]
 
             c.execute(
                 """INSERT INTO files (repo_id, uploader_id, path, stored_name, size, mime, created_at, thumb)
@@ -1833,7 +1932,14 @@ async def upload(
                 "UPDATE repos SET updated_at = ? WHERE id = ?",
                 (int(time.time()), repo["id"]),
             )
+        used += size
         saved += 1
+
+    if refused:
+        msg = f"{refused}（本次已保存 {saved} 个）" if saved else refused
+        return RedirectResponse(
+            f"/r/{owner}/{repo_name}?msg={quote(msg)}", status_code=303
+        )
     return RedirectResponse(
         f"/r/{owner}/{repo_name}?msg={saved}+个文件已上传", status_code=303
     )
@@ -2986,6 +3092,540 @@ def api_user_stats(username: str, request: Request):
         entry["count"] += r["n"]
         entry["bytes"] += r["bytes"]
     return {"username": username, "days": days}
+
+
+# ---------------------------------------------------------------- admin
+#
+# The owner's console at /admin. "Owner" here is the same definition the 站长
+# badge already uses — the first row in `users` (site_owner_name) — so the
+# console adds no roles table for a single account.
+#
+# This is the one place in the app that treats that badge as a permission
+# instead of a label, which is why the check lives in a single function that
+# every route below goes through. A missing check here would be a silent hole
+# rather than a visible bug, so each route re-derives the owner rather than
+# trusting a flag passed down from the page.
+#
+# A visitor who is not the owner is sent to the home page. Answering 403 would
+# tell them the console exists; the home page tells them nothing.
+
+
+def _require_owner(request: Request):
+    """The signed-in owner, or None when the caller has no business here."""
+    me = current_user(request)
+    if not me or me["username"] != site_owner_name():
+        return None
+    return me
+
+
+def _admin_redirect(msg: str) -> RedirectResponse:
+    """Back to the console with a flash message, via the ?msg= chain."""
+    return RedirectResponse(f"/admin?msg={quote(msg)}", status_code=303)
+
+
+def _delete_repo_tree(c: sqlite3.Connection, repo_id: int) -> int:
+    """Delete a repo and every row and file that hangs off it.
+
+    Returns the number of files removed. Factored out because the repo-delete
+    route, bulk-delete and this console all need the same sweep — three inlined
+    copies is already two too many, and each copy is its own chance to forget a
+    table.
+
+    Note `comments` is swept by repo_id, which is safe with the reserved public
+    room: chat messages live under repo_id 0 and no repo ever has that id.
+    """
+    removed = 0
+    for f in c.execute(
+        "SELECT stored_name, thumb FROM files WHERE repo_id = ?", (repo_id,)
+    ):
+        (UPLOAD_DIR / f["stored_name"]).unlink(missing_ok=True)
+        if f["thumb"]:
+            (UPLOAD_DIR / f["thumb"]).unlink(missing_ok=True)
+        removed += 1
+    # The repo's own cover is an upload too, and nothing else references it —
+    # dropping the row without this leaves the picture on disk forever. (The
+    # repo-delete route predates this helper and still leaks its cover; the
+    # console's orphan cleaner reclaims those.)
+    repo = c.execute("SELECT cover FROM repos WHERE id = ?", (repo_id,)).fetchone()
+    if repo and (repo["cover"] or "").startswith("upload:"):
+        (UPLOAD_DIR / repo["cover"].split(":")[1]).unlink(missing_ok=True)
+    c.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+    c.execute("DELETE FROM comments WHERE repo_id = ?", (repo_id,))
+    c.execute("DELETE FROM stars WHERE repo_id = ?", (repo_id,))
+    c.execute("DELETE FROM folder_names WHERE repo_id = ?", (repo_id,))
+    c.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+    return removed
+
+
+def _delete_user_tree(c: sqlite3.Connection, user_id: int) -> dict:
+    """Delete a user and every row and file that refers to them.
+
+    The order is forced by the foreign keys: `repos.owner_id`, `files.uploader_id`,
+    `comments.user_id`, `stars.user_id`, `follows.follower_id/followee_id` and
+    `sessions.user_id` all point at `users`, and the connection runs with
+    `PRAGMA foreign_keys = ON`, so the user row cannot go until nothing refers to
+    it any more.
+    """
+    # Files this user uploaded into *other* people's repos. The repo sweep below
+    # never reaches them, and leaving them would both orphan the payload on disk
+    # and block the user delete.
+    elsewhere = c.execute(
+        "SELECT stored_name, thumb FROM files WHERE uploader_id = ?", (user_id,)
+    ).fetchall()
+    for f in elsewhere:
+        (UPLOAD_DIR / f["stored_name"]).unlink(missing_ok=True)
+        if f["thumb"]:
+            (UPLOAD_DIR / f["thumb"]).unlink(missing_ok=True)
+
+    repos_removed = 0
+    files_removed = 0
+    for r in c.execute("SELECT id FROM repos WHERE owner_id = ?", (user_id,)):
+        files_removed += _delete_repo_tree(c, r["id"])
+        repos_removed += 1
+
+    # Whatever is still tagged with this uploader sits in someone else's repo.
+    c.execute("DELETE FROM files WHERE uploader_id = ?", (user_id,))
+    files_removed += len(elsewhere)
+
+    # Other people's comments may quote this user's; clear the pointer before the
+    # target disappears, so no comment is left referring to an id that is gone.
+    c.execute(
+        """UPDATE comments SET quote_id = NULL
+            WHERE quote_id IN (SELECT id FROM comments WHERE user_id = ?)""",
+        (user_id,),
+    )
+    # Includes their public-room messages, which is intended: deleting an account
+    # takes its chat history with it.
+    c.execute("DELETE FROM comments WHERE user_id = ?", (user_id,))
+    c.execute("DELETE FROM stars WHERE user_id = ?", (user_id,))
+    c.execute("DELETE FROM follows WHERE follower_id = ? OR followee_id = ?",
+              (user_id, user_id))
+    c.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+    row = c.execute(
+        "SELECT avatar, banner, chat_bg FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if row:
+        # An uploaded avatar is a file in uploads; "preset:N" names a static SVG
+        # that the user does not own.
+        avatar = row["avatar"]
+        if avatar and not avatar.startswith("preset:"):
+            (UPLOAD_DIR / avatar).unlink(missing_ok=True)
+        for raw in (row["banner"], row["chat_bg"]):
+            _, image = _read_scene(raw)
+            if image:
+                (UPLOAD_DIR / image).unlink(missing_ok=True)
+
+    c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    return {"repos": repos_removed, "files": files_removed}
+
+
+def _referenced_uploads() -> set[str]:
+    """Every filename in uploads/ that some row in the database still points at.
+
+    Collected from all five places a filename is stored, not just `files`: a
+    profile avatar, a repo cover and a banner/chat background are uploads too,
+    and missing any of them would make the orphan cleaner delete a picture that
+    is still in use.
+    """
+    names: set[str] = set()
+    with db() as c:
+        for r in c.execute("SELECT stored_name, thumb FROM files"):
+            names.add(r["stored_name"])
+            if r["thumb"]:
+                names.add(r["thumb"])
+        for r in c.execute("SELECT avatar FROM users"):
+            if r["avatar"] and not r["avatar"].startswith("preset:"):
+                names.add(r["avatar"])
+        for r in c.execute("SELECT cover FROM repos"):
+            key = r["cover"] or ""
+            if key.startswith("upload:"):
+                names.add(key.split(":")[1])
+        for r in c.execute("SELECT banner, chat_bg FROM users"):
+            for raw in (r["banner"], r["chat_bg"]):
+                _, image = _read_scene(raw)
+                if image:
+                    names.add(image)
+    return names
+
+
+def _upload_health(sample: int = 20) -> dict:
+    """Reconcile uploads/ against what the database references.
+
+    Two failures worth surfacing, in opposite directions:
+
+    * orphans — files on disk nothing points at. The known producer is
+      `delete_file`, which removes the payload but not the thumbnail, so those
+      accumulate silently; a crashed upload's `tmp_*` file is the other.
+    * missing — rows whose payload is gone. The row still renders in a file
+      list and 404s on download, which is the state a real repo cover was found
+      in on this site.
+
+    The orphan and missing lists are capped for display; only the counts are
+    complete.
+    """
+    referenced = _referenced_uploads()
+
+    disk_count = 0
+    disk_bytes = 0
+    orphans: list[tuple[str, int]] = []
+    for path in UPLOAD_DIR.iterdir():
+        if not path.is_file():
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        disk_count += 1
+        disk_bytes += size
+        if path.name not in referenced:
+            orphans.append((path.name, size))
+
+    missing = sorted(n for n in referenced if not (UPLOAD_DIR / n).exists())
+    orphans.sort(key=lambda item: -item[1])
+    # The console draws a composition ring over these three, so it needs them to
+    # be a partition rather than four overlapping counts: a file is either on
+    # disk and referenced, referenced but gone, or on disk and referenced by
+    # nothing. `healthy` is the first of those — what `disk_count - orphan_count`
+    # works out to, which is the same as `referenced_count - missing_count`.
+    return {
+        "disk_count": disk_count,
+        "disk_bytes": disk_bytes,
+        "referenced_count": len(referenced),
+        "healthy_count": disk_count - len(orphans),
+        "orphan_count": len(orphans),
+        "orphan_bytes": sum(size for _, size in orphans),
+        "orphans": orphans if sample <= 0 else orphans[:sample],
+        "missing_count": len(missing),
+        "missing": missing if sample <= 0 else missing[:sample],
+    }
+
+
+def _clean_orphans() -> tuple[int, int]:
+    """Delete every file in uploads/ the database does not reference."""
+    referenced = _referenced_uploads()
+    removed = 0
+    freed = 0
+    for path in UPLOAD_DIR.iterdir():
+        if not path.is_file() or path.name in referenced:
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        path.unlink(missing_ok=True)
+        removed += 1
+        freed += size
+    return removed, freed
+
+
+# Rows per table on the console. At 50 the three tables stay a scrollable
+# length while a page is still a single cheap query; what they must not do is
+# grow without bound, which is what they did at first — 200 repos made a
+# 9000-pixel page and every load rendered all of them.
+ADMIN_PER_PAGE = 50
+
+
+def _like(q: str) -> str:
+    """A LIKE pattern for `q`, with the wildcards in the input neutralised.
+
+    Escaped with "!" rather than the usual backslash so the SQL can say
+    ESCAPE '!' — a backslash inside a Python string literal that also has to
+    survive into SQL is exactly the quoting tangle this avoids. Without the
+    escaping a search for "_" would match every row, and the seeded usernames
+    are made of underscores.
+    """
+    return "%" + q.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+
+
+def _pager(total: int, page: int, params: dict, prefix: str) -> dict:
+    """Paging state for one console table.
+
+    Links carry the whole current state with only this table's page number
+    replaced, so paging the repo list does not silently drop the filter you had
+    typed into the user list. The page strip is a window rather than every page:
+    a table with hundreds of pages would otherwise render hundreds of links.
+    """
+    pages = max(1, (total + ADMIN_PER_PAGE - 1) // ADMIN_PER_PAGE)
+    page = min(max(1, page), pages)
+
+    def url(target: int) -> str:
+        query = {k: v for k, v in params.items() if v not in ("", None)}
+        # Drop this table's own page first: params carries the current page, and
+        # leaving it in would make the "previous" link point at the page you are
+        # already on. Page 1 is the default, so it is simply left out.
+        query.pop(f"{prefix}_page", None)
+        if target > 1:
+            query[f"{prefix}_page"] = target
+        return "/admin?" + urlencode(query)
+
+    first = max(1, min(page - 2, pages - 4))
+    last = min(pages, first + 4)
+    return {
+        "page": page,
+        "pages": pages,
+        "total": total,
+        "prev": url(page - 1) if page > 1 else None,
+        "next": url(page + 1) if page < pages else None,
+        "links": [(n, url(n), n == page) for n in range(first, last + 1)],
+        "offset": (page - 1) * ADMIN_PER_PAGE,
+    }
+
+
+@app.get("/admin")
+def admin_page(request: Request, msg: str = "",
+               user_q: str = "", user_page: int = 1,
+               repo_q: str = "", repo_page: int = 1,
+               comment_q: str = "", comment_page: int = 1):
+    me = _require_owner(request)
+    if not me:
+        return RedirectResponse("/", status_code=303)
+
+    # Whitespace is not a search. Without this, a stray space in the box matched
+    # nothing and the table reported "no results" for a query the user cannot
+    # even see.
+    user_q, repo_q, comment_q = user_q.strip(), repo_q.strip(), comment_q.strip()
+
+    # Every link built from here must be able to restate the other tables'
+    # state, so the current values travel as one dict — the filters and the page
+    # numbers, or paging one table would drop where you were in another. Page 1
+    # is left out because it is the default; the filters are not, since "1" is a
+    # legitimate search (it looks up that id).
+    params = {"user_q": user_q, "repo_q": repo_q, "comment_q": comment_q}
+    for name, value in (("user_page", user_page), ("repo_page", repo_page),
+                        ("comment_page", comment_page)):
+        if value > 1:
+            params[name] = value
+
+    with db() as c:
+        def one(sql: str, args: tuple = ()) -> int:
+            """A single scalar COUNT/SUM, named so the table below reads as data."""
+            return c.execute(sql, args).fetchone()["n"]
+
+        totals = {
+            "users": one("SELECT COUNT(*) n FROM users"),
+            "repos": one("SELECT COUNT(*) n FROM repos"),
+            "repos_private": one("SELECT COUNT(*) n FROM repos WHERE is_private = 1"),
+            "files": one("SELECT COUNT(*) n FROM files"),
+            "follows": one("SELECT COUNT(*) n FROM follows"),
+            "stars": one("SELECT COUNT(*) n FROM stars"),
+            "comments": one("SELECT COUNT(*) n FROM comments"),
+            "chat": one("SELECT COUNT(*) n FROM comments WHERE repo_id = 0"),
+            "downloads": one("SELECT COALESCE(SUM(downloads),0) n FROM files"),
+        }
+
+        # A search of digits looks up an id, because that is the one column of
+        # the user table that cannot be found by name.
+        user_where, user_args = "", ()
+        if user_q:
+            if user_q.isdigit():
+                user_where, user_args = "WHERE u.id = ?", (int(user_q),)
+            else:
+                user_where = "WHERE u.username LIKE ? ESCAPE '!'"
+                user_args = (_like(user_q),)
+
+        repo_where, repo_args = "", ()
+        if repo_q:
+            repo_where = ("WHERE r.name LIKE ? ESCAPE '!'"
+                          " OR u.username LIKE ? ESCAPE '!'")
+            repo_args = (_like(repo_q), _like(repo_q))
+
+        comment_where, comment_args = "", ()
+        if comment_q:
+            comment_where = ("WHERE cm.body LIKE ? ESCAPE '!'"
+                             " OR u.username LIKE ? ESCAPE '!'")
+            comment_args = (_like(comment_q), _like(comment_q))
+
+        user_total = one(f"SELECT COUNT(*) n FROM users u {user_where}", user_args)
+        repo_total = one(
+            f"SELECT COUNT(*) n FROM repos r JOIN users u ON u.id = r.owner_id {repo_where}",
+            repo_args,
+        )
+        comment_total = one(
+            f"""SELECT COUNT(*) n FROM comments cm
+                 JOIN users u ON u.id = cm.user_id {comment_where}""",
+            comment_args,
+        )
+
+        user_pager = _pager(user_total, user_page, params, "user")
+        repo_pager = _pager(repo_total, repo_page, params, "repo")
+        comment_pager = _pager(comment_total, comment_page, params, "comment")
+
+        users = c.execute(
+            f"""SELECT u.id, u.username, u.avatar, u.created_at,
+                       (SELECT COUNT(*) FROM repos r WHERE r.owner_id = u.id) repo_count,
+                       (SELECT COUNT(*) FROM files f JOIN repos r ON r.id = f.repo_id
+                         WHERE r.owner_id = u.id) file_count
+                  FROM users u {user_where}
+                 ORDER BY u.id LIMIT ? OFFSET ?""",
+            user_args + (ADMIN_PER_PAGE, user_pager["offset"]),
+        ).fetchall()
+        repos = c.execute(
+            f"""SELECT r.id, r.name, r.is_private, r.created_at, u.username,
+                       (SELECT COUNT(*) FROM files f WHERE f.repo_id = r.id) file_count,
+                       (SELECT COALESCE(SUM(f.size),0) FROM files f
+                         WHERE f.repo_id = r.id) total_size,
+                       (SELECT COUNT(*) FROM stars s WHERE s.repo_id = r.id) star_count
+                  FROM repos r JOIN users u ON u.id = r.owner_id {repo_where}
+                 ORDER BY r.id LIMIT ? OFFSET ?""",
+            repo_args + (ADMIN_PER_PAGE, repo_pager["offset"]),
+        ).fetchall()
+        comments = c.execute(
+            f"""SELECT cm.id, cm.repo_id, cm.body, cm.created_at, u.username,
+                       r.name AS repo_name, ru.username AS repo_owner
+                  FROM comments cm
+                  JOIN users u ON u.id = cm.user_id
+                  LEFT JOIN repos r ON r.id = cm.repo_id
+                  LEFT JOIN users ru ON ru.id = r.owner_id
+                 {comment_where}
+                 ORDER BY cm.id DESC LIMIT ? OFFSET ?""",
+            comment_args + (ADMIN_PER_PAGE, comment_pager["offset"]),
+        ).fetchall()
+
+    health = _upload_health()
+
+    # The quota is shown against the same figure an upload is measured by —
+    # the directory's actual size — so the console cannot report headroom that
+    # an upload would then refuse.
+    with db() as c:
+        quota = disk_quota(c)
+    quota_value, quota_unit = quota_form_value(quota)
+    used_pct = round(100 * health["disk_bytes"] / quota, 2) if quota else 0.0
+
+    # What the console visualises, as data rather than markup: the numbers ship
+    # once as JSON and the canvases look themselves up by key, so a chart can
+    # never disagree with the count beside it.
+    #
+    # Only the counts go into the bar series. 占用空间 is a size, and stacking
+    # bytes beside a download count would put a number with a different unit and
+    # a different meaning on the same axis; it keeps its plain figure. The counts
+    # themselves span four orders of magnitude (5 chat messages against 52269
+    # downloads), which the client handles by stacking on a log scale.
+    charts = {
+        "bars": {
+            "users": totals["users"],
+            "repos": totals["repos"],
+            "files": totals["files"],
+            "follows": totals["follows"],
+            "stars": totals["stars"],
+            "comments": totals["comments"],
+            "chat": totals["chat"],
+            "downloads": totals["downloads"],
+            "private_repos": totals["repos_private"],
+        },
+        # A partition, not four overlapping figures: every known file is either
+        # on disk and referenced, referenced but gone, or on disk and referenced
+        # by nothing. See _upload_health.
+        "ring": [
+            {"key": "ok", "label": "正常在盘", "value": health["healthy_count"]},
+            {"key": "missing", "label": "缺失", "value": health["missing_count"]},
+            {"key": "orphan", "label": "孤立", "value": health["orphan_count"]},
+        ],
+    }
+
+    return render(
+        request,
+        "admin.html",
+        page_ctx(request, nav="admin", msg=msg, totals=totals, health=health,
+                 charts=charts,
+                 quota=quota, quota_value=quota_value, quota_unit=quota_unit,
+                 used_pct=used_pct, used_bytes=health["disk_bytes"],
+                 units=list(QUOTA_UNITS),
+                 user_list={"rows": users, "pager": user_pager, "q": user_q},
+                 repo_list={"rows": repos, "pager": repo_pager, "q": repo_q},
+                 comment_list={"rows": comments, "pager": comment_pager, "q": comment_q}),
+    )
+
+
+@app.post("/admin/quota")
+def admin_set_quota(request: Request, value: str = Form(""), unit: str = Form("TB")):
+    me = _require_owner(request)
+    if not me:
+        return RedirectResponse("/", status_code=303)
+    if unit not in QUOTA_UNITS:
+        return _admin_redirect("单位只能是 MB / GB / TB")
+    try:
+        amount = float(value)
+    except ValueError:
+        return _admin_redirect("上限必须是一个数字")
+    if not amount > 0:
+        return _admin_redirect("上限必须大于 0")
+    quota = int(amount * QUOTA_UNITS[unit])
+    # A ceiling below what is already stored would refuse every future upload
+    # over one typo, so it is allowed but called out rather than silently set.
+    with db() as c:
+        set_setting(c, "disk_quota", str(quota))
+    used = uploads_bytes()
+    if used > quota:
+        return _admin_redirect(
+            f"上限已设为 {fmt_size(quota)}，但当前已占用 {fmt_size(used)}，上传会被拒绝"
+        )
+    return _admin_redirect(f"磁盘上限已设为 {fmt_size(quota)}")
+
+
+@app.post("/admin/user/{username}/delete")
+def admin_delete_user(request: Request, username: str):
+    me = _require_owner(request)
+    if not me:
+        return RedirectResponse("/", status_code=303)
+    # The console exists to moderate everyone else; removing the account that
+    # defines the console would leave nobody able to open it again.
+    if username == site_owner_name():
+        return _admin_redirect("站长账号不能删除")
+    with db() as c:
+        row = c.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if not row:
+            return _admin_redirect(f"用户 {username} 不存在")
+        stats = _delete_user_tree(c, row["id"])
+    return _admin_redirect(
+        f"已删除用户 {username}（仓库 {stats['repos']}、文件 {stats['files']}）"
+    )
+
+
+@app.post("/admin/repo/{repo_id}/delete")
+def admin_delete_repo(request: Request, repo_id: int):
+    me = _require_owner(request)
+    if not me:
+        return RedirectResponse("/", status_code=303)
+    with db() as c:
+        row = c.execute(
+            """SELECT r.name, u.username FROM repos r JOIN users u ON u.id = r.owner_id
+                WHERE r.id = ?""",
+            (repo_id,),
+        ).fetchone()
+        if not row:
+            return _admin_redirect("仓库不存在")
+        files = _delete_repo_tree(c, repo_id)
+    return _admin_redirect(
+        f"已删除仓库 {row['username']}/{row['name']}（{files} 个文件）"
+    )
+
+
+@app.post("/admin/comment/{comment_id}/delete")
+def admin_delete_comment(request: Request, comment_id: int):
+    me = _require_owner(request)
+    if not me:
+        return RedirectResponse("/", status_code=303)
+    with db() as c:
+        row = c.execute("SELECT id FROM comments WHERE id = ?", (comment_id,)).fetchone()
+        if not row:
+            return _admin_redirect("评论不存在")
+        c.execute("UPDATE comments SET quote_id = NULL WHERE quote_id = ?", (comment_id,))
+        c.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
+    return _admin_redirect("评论已删除")
+
+
+@app.post("/admin/orphans/clean")
+def admin_clean_orphans(request: Request):
+    me = _require_owner(request)
+    if not me:
+        return RedirectResponse("/", status_code=303)
+    removed, freed = _clean_orphans()
+    if not removed:
+        return _admin_redirect("没有孤立文件需要清理")
+    return _admin_redirect(
+        f"已清理 {removed} 个孤立文件，释放 {freed / 1024 / 1024:.1f} MB"
+    )
 
 
 if __name__ == "__main__":
